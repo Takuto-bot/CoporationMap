@@ -105,3 +105,21 @@ python -m http.server 4173
 - Provider統合・検索・フィルター: `src/services/PlaceService.js`
 
 現在はUI体験を優先し、MockProviderで `Map -> Search -> Filter -> Marker -> Side Panel -> Detail Panel` が一通り動く状態にしています。
+# 企業・官公庁マップ
+
+日本全国の企業・官公庁を地図上から探せる、個人利用向けのWebアプリです。日経平均株価の構成225銘柄と官公庁を収録しています。
+
+## スマホで使う
+
+GitHub Pagesの公開URLをスマートフォンで開き、ホーム画面に追加してください。以後はホーム画面の「企業マップ」アイコンから、通常のアプリのように起動できます。
+
+- iPhone/iPad: Safariの共有メニューから「ホーム画面に追加」
+- Android: Chromeのメニューから「アプリをインストール」または「ホーム画面に追加」
+
+初回表示後はアプリ本体を端末にキャッシュします。地図表示や最新の地図データには通信が必要です。
+
+## ローカル起動
+
+```powershell
+npm run dev
+```
