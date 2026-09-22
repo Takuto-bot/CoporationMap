@@ -7,6 +7,7 @@ const DEFAULT_ZOOM = 12;
 const SELECTED_ZOOM = 16;
 const MAX_SIDEBAR_RESULTS = 24;
 const MAX_SUGGESTIONS = 8;
+const mobileLayoutQuery = window.matchMedia("(max-width: 760px)");
 
 const app = document.querySelector("#app");
 const sidePanel = document.querySelector("#sidePanel");
@@ -112,12 +113,15 @@ const state = {
   searchQuery: "",
   visited: new Set(JSON.parse(localStorage.getItem("corporation-map-visited") || "[]")),
   markers: new Map(),
+  mobileSheetStage: "peek",
+  isAnimatingToPlace: false,
 };
 
 init();
 
 async function init() {
   applyInitialTheme();
+  setMobileSheetStage("peek", { animate: false });
   renderFilterChips();
   bindEvents();
   state.allPlaces = await placeService.getPlaces();
@@ -128,6 +132,12 @@ async function init() {
 function bindEvents() {
   map.on("moveend zoomend", () => {
     refreshMapData();
+  });
+  map.on("dragstart", minimizeSheetForMapInteraction);
+  map.on("zoomstart", minimizeSheetForMapInteraction);
+  mobileLayoutQuery.addEventListener("change", () => {
+    setMobileSheetStage("peek", { animate: false });
+    renderSidePanel();
   });
 
   searchInput.addEventListener("input", () => {
@@ -274,6 +284,8 @@ function renderSidePanel() {
     return;
   }
 
+  sidePanel.classList.remove("has-mobile-detail");
+
   const center = map.getCenter();
   const places = state.visiblePlaces
     .map((place) => ({
@@ -306,7 +318,7 @@ function renderSidePanel() {
     list.replaceChildren(...places.map(createPanelItem));
   }
 
-  sidePanel.replaceChildren(header, list);
+  sidePanel.replaceChildren(createSheetHandle(), header, list);
 }
 
 function createPanelItem(place) {
@@ -331,6 +343,12 @@ function createPanelItem(place) {
 }
 
 function renderDetailPanel(place) {
+  if (isMobileLayout()) {
+    renderMobileDetailCard(place);
+    return;
+  }
+
+  sidePanel.classList.remove("has-mobile-detail");
   const type = getTypeMeta(place.type);
   const header = document.createElement("div");
   header.className = "panel-header";
@@ -385,6 +403,102 @@ function renderDetailPanel(place) {
   sidePanel.replaceChildren(header, body);
 }
 
+function renderMobileDetailCard(place) {
+  const type = getTypeMeta(place.type);
+  sidePanel.classList.add("has-mobile-detail");
+
+  const card = document.createElement("div");
+  card.className = "mobile-detail-card";
+  card.innerHTML = `
+    <div class="mobile-detail-summary">
+      <span class="type-badge badge-${place.type}" aria-hidden="true">${icons[type.iconName]}</span>
+      <div class="mobile-detail-copy">
+        <p class="panel-kicker">${escapeHtml(type.label)}${place.headquarters ? " ・ 本社" : ""}</p>
+        <h2 class="mobile-detail-title">${escapeHtml(place.name)}</h2>
+        <p class="mobile-detail-meta">${escapeHtml(place.category)} ・ ${escapeHtml(place.address)}</p>
+      </div>
+      <button class="icon-button subtle close-detail-button" type="button" aria-label="詳細を閉じる">
+        <span class="icon close-icon">${icons.close}</span>
+      </button>
+    </div>
+    <div class="mobile-detail-expanded">
+      ${place.description ? `<p class="detail-description">${escapeHtml(place.description)}</p>` : ""}
+      <dl class="detail-grid">
+        ${detailRow("住所", place.address)}
+        ${detailRow("証券コード", place.stockCode)}
+        ${detailRow("法人番号", place.corporateNumber)}
+        ${detailRow("出典", place.source)}
+      </dl>
+      <div class="detail-actions">
+        ${place.website ? `<a class="text-button primary" href="${place.website}" target="_blank" rel="noopener noreferrer"><span class="icon">${icons.external}</span>公式サイト</a>` : ""}
+        <button id="visitedButton" class="text-button" type="button"><span class="icon">${icons.check}</span>${state.visited.has(place.id) ? "訪問済み" : "訪問済みにする"}</button>
+      </div>
+    </div>
+  `;
+
+  card.querySelector(".close-detail-button").addEventListener("click", clearSelectedPlace);
+  card.querySelector("#visitedButton")?.addEventListener("click", () => toggleVisited(place.id));
+  sidePanel.replaceChildren(createSheetHandle(), card);
+}
+
+function createSheetHandle() {
+  if (!isMobileLayout()) return document.createDocumentFragment();
+
+  const handle = document.createElement("div");
+  handle.className = "sheet-drag-handle";
+  handle.tabIndex = 0;
+  handle.setAttribute("role", "button");
+  handle.setAttribute("aria-label", "施設一覧を展開または縮小");
+  handle.setAttribute("aria-expanded", state.mobileSheetStage === "peek" ? "false" : "true");
+  handle.innerHTML = '<span aria-hidden="true"></span>';
+
+  let dragStartY = 0;
+  let dragStartHeight = 0;
+  let pointerId = null;
+
+  handle.addEventListener("pointerdown", (event) => {
+    pointerId = event.pointerId;
+    dragStartY = event.clientY;
+    dragStartHeight = sidePanel.getBoundingClientRect().height;
+    handle.setPointerCapture(pointerId);
+    sidePanel.classList.add("is-dragging");
+    event.preventDefault();
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== pointerId) return;
+    const { peek, full } = getMobileSheetHeights();
+    const nextHeight = clamp(dragStartHeight + dragStartY - event.clientY, peek, full);
+    sidePanel.style.setProperty("--sheet-drag-height", `${nextHeight}px`);
+  });
+
+  const finishDrag = (event) => {
+    if (event.pointerId !== pointerId) return;
+    const currentHeight = Number.parseFloat(sidePanel.style.getPropertyValue("--sheet-drag-height")) || dragStartHeight;
+    pointerId = null;
+    sidePanel.classList.remove("is-dragging");
+    sidePanel.style.removeProperty("--sheet-drag-height");
+    setMobileSheetStage(getClosestSheetStage(currentHeight));
+  };
+
+  handle.addEventListener("pointerup", finishDrag);
+  handle.addEventListener("pointercancel", finishDrag);
+  handle.addEventListener("keydown", (event) => {
+    const stages = ["peek", "half", "full"];
+    const index = stages.indexOf(state.mobileSheetStage);
+    if (event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setMobileSheetStage(stages[Math.min(index + 1, stages.length - 1)]);
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setMobileSheetStage(stages[Math.max(index - 1, 0)]);
+    }
+  });
+
+  return handle;
+}
+
 function renderSuggestions() {
   const query = searchInput.value.trim();
   if (!query) {
@@ -436,9 +550,14 @@ function selectPlace(placeId, options = {}) {
   if (!place) return;
 
   state.selectedPlaceId = placeId;
+  if (isMobileLayout()) setMobileSheetStage("peek");
   if (options.fly) {
+    state.isAnimatingToPlace = true;
     map.flyTo([place.latitude, place.longitude], options.zoom || Math.max(map.getZoom(), SELECTED_ZOOM), {
       duration: 0.65,
+    });
+    map.once("moveend", () => {
+      state.isAnimatingToPlace = false;
     });
   }
   updateAllMarkerStates();
@@ -475,6 +594,54 @@ function getSelectedPlace() {
   return state.allPlaces.find((place) => place.id === state.selectedPlaceId) || null;
 }
 
+function clearSelectedPlace() {
+  state.selectedPlaceId = null;
+  updateAllMarkerStates();
+  if (isMobileLayout()) setMobileSheetStage("peek");
+  renderSidePanel();
+}
+
+function minimizeSheetForMapInteraction() {
+  if (!isMobileLayout() || state.isAnimatingToPlace) return;
+  if (state.selectedPlaceId) {
+    state.selectedPlaceId = null;
+    updateAllMarkerStates();
+    renderSidePanel();
+  }
+  setMobileSheetStage("peek");
+}
+
+function isMobileLayout() {
+  return mobileLayoutQuery.matches;
+}
+
+function getMobileSheetHeights() {
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  return {
+    peek: Math.max(128, viewportHeight * 0.2),
+    half: viewportHeight * 0.5,
+    full: viewportHeight * 0.9,
+  };
+}
+
+function getClosestSheetStage(height) {
+  const heights = getMobileSheetHeights();
+  return Object.entries(heights).reduce((closest, [stage, stageHeight]) =>
+    Math.abs(stageHeight - height) < Math.abs(heights[closest] - height) ? stage : closest,
+  "peek");
+}
+
+function setMobileSheetStage(stage, { animate = true } = {}) {
+  state.mobileSheetStage = stage;
+  if (!isMobileLayout()) {
+    delete app.dataset.sheetStage;
+    return;
+  }
+  app.dataset.sheetStage = stage;
+  sidePanel.classList.toggle("without-sheet-animation", !animate);
+  if (!animate) window.setTimeout(() => sidePanel.classList.remove("without-sheet-animation"), 0);
+}
+
 function handleLocate() {
   if (!navigator.geolocation) {
     showToast("このブラウザでは現在地を取得できません。");
@@ -503,7 +670,7 @@ function toggleVisited(placeId) {
   }
   localStorage.setItem("corporation-map-visited", JSON.stringify([...state.visited]));
   const selected = getSelectedPlace();
-  if (selected) renderDetailPanel(selected);
+  if (selected) renderSidePanel();
 }
 
 function applyInitialTheme() {
@@ -560,4 +727,8 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
