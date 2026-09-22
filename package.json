@@ -1,0 +1,11 @@
+{
+  "name": "corporation-map",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "日本全国の企業・官公庁・公共機関を地図上から探索できるWebアプリ",
+  "scripts": {
+    "dev": "python -m http.server 4173",
+    "start": "python -m http.server 4173"
+  }
+}

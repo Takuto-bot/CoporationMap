@@ -1,0 +1,563 @@
+import { PlaceService } from "./services/PlaceService.js";
+import { MockPlaceProvider } from "./providers/MockPlaceProvider.js";
+import { TYPE_META, FILTERS, getTypeMeta } from "./models/place.js";
+
+const JAPAN_CENTER = [35.681236, 139.767125];
+const DEFAULT_ZOOM = 12;
+const SELECTED_ZOOM = 16;
+const MAX_SIDEBAR_RESULTS = 24;
+const MAX_SUGGESTIONS = 8;
+
+const app = document.querySelector("#app");
+const sidePanel = document.querySelector("#sidePanel");
+const searchInput = document.querySelector("#searchInput");
+const suggestions = document.querySelector("#suggestions");
+const filterChips = document.querySelector("#filterChips");
+const clearSearchButton = document.querySelector("#clearSearchButton");
+const locateButton = document.querySelector("#locateButton");
+const zoomInButton = document.querySelector("#zoomInButton");
+const zoomOutButton = document.querySelector("#zoomOutButton");
+const themeToggle = document.querySelector("#themeToggle");
+const themeIcon = document.querySelector("#themeIcon");
+
+const icons = {
+  search:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg>',
+  close:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>',
+  locate:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>',
+  plus:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
+  minus:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M5 12h14"></path></svg>',
+  sun:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>',
+  moon:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.3A8 8 0 0 1 9.7 4 7 7 0 1 0 20 14.3Z"></path></svg>',
+  map:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"></path><path d="M9 3v15"></path><path d="M15 6v15"></path></svg>',
+  external:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>',
+  check:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"></path></svg>',
+  headquarters:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16"></path><path d="M6 21V5a2 2 0 0 1 2-2h7v18"></path><path d="M15 7h3l-1-2 1-2h-3"></path><path d="M10 8h1"></path><path d="M10 12h1"></path><path d="M10 16h1"></path></svg>',
+  company:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h7v18"></path><path d="M14 8h3a2 2 0 0 1 2 2v11"></path><path d="M9 7h1"></path><path d="M9 11h1"></path><path d="M9 15h1"></path></svg>',
+  government:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-6 9 6"></path><path d="M4 10h16"></path><path d="M6 10v8"></path><path d="M10 10v8"></path><path d="M14 10v8"></path><path d="M18 10v8"></path><path d="M3 18h18"></path><path d="M2 22h20"></path></svg>',
+};
+
+document.querySelector(".search-icon").innerHTML = icons.search;
+document.querySelector(".close-icon").innerHTML = icons.close;
+document.querySelector(".locate-icon").innerHTML = icons.locate;
+document.querySelector(".plus-icon").innerHTML = icons.plus;
+document.querySelector(".minus-icon").innerHTML = icons.minus;
+
+const placeService = new PlaceService({
+  providers: [new MockPlaceProvider()],
+});
+
+const map = L.map("map", {
+  center: JAPAN_CENTER,
+  zoom: DEFAULT_ZOOM,
+  zoomControl: false,
+  minZoom: 5,
+  maxZoom: 18,
+  preferCanvas: true,
+});
+
+const baseLayers = {
+  light: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }),
+  dark: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }),
+};
+
+let activeBaseLayer = null;
+
+const clusterLayer = L.markerClusterGroup({
+  chunkedLoading: true,
+  showCoverageOnHover: false,
+  maxClusterRadius: 54,
+  spiderfyOnMaxZoom: true,
+  disableClusteringAtZoom: 17,
+});
+
+map.addLayer(clusterLayer);
+
+const scheduleMapResize = () => {
+  window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
+  window.setTimeout(() => map.invalidateSize({ pan: false }), 220);
+};
+const mapResizeObserver = new ResizeObserver(scheduleMapResize);
+mapResizeObserver.observe(document.querySelector("#map"));
+window.addEventListener("resize", scheduleMapResize);
+window.addEventListener("orientationchange", scheduleMapResize);
+window.setTimeout(scheduleMapResize, 0);
+window.setTimeout(scheduleMapResize, 420);
+
+const state = {
+  allPlaces: [],
+  visiblePlaces: [],
+  selectedPlaceId: null,
+  hoveredPlaceId: null,
+  activeType: "all",
+  headquartersOnly: false,
+  searchQuery: "",
+  visited: new Set(JSON.parse(localStorage.getItem("corporation-map-visited") || "[]")),
+  markers: new Map(),
+};
+
+init();
+
+async function init() {
+  applyInitialTheme();
+  renderFilterChips();
+  bindEvents();
+  state.allPlaces = await placeService.getPlaces();
+  await refreshMapData();
+  renderSidePanel();
+}
+
+function bindEvents() {
+  map.on("moveend zoomend", () => {
+    refreshMapData();
+  });
+
+  searchInput.addEventListener("input", () => {
+    state.searchQuery = searchInput.value.trim();
+    clearSearchButton.classList.toggle("hidden", !state.searchQuery);
+    renderSuggestions();
+    refreshMapData();
+  });
+
+  searchInput.addEventListener("focus", renderSuggestions);
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".search-stack")) {
+      suggestions.classList.add("hidden");
+    }
+  });
+
+  clearSearchButton.addEventListener("click", () => {
+    searchInput.value = "";
+    state.searchQuery = "";
+    clearSearchButton.classList.add("hidden");
+    suggestions.classList.add("hidden");
+    refreshMapData();
+    searchInput.focus();
+  });
+
+  locateButton.addEventListener("click", handleLocate);
+  zoomInButton.addEventListener("click", () => map.zoomIn());
+  zoomOutButton.addEventListener("click", () => map.zoomOut());
+  themeToggle.addEventListener("click", toggleTheme);
+}
+
+async function refreshMapData() {
+  const bounds = map.getBounds();
+  state.visiblePlaces = await placeService.getPlaces({
+    bounds,
+    filters: getCurrentFilters(),
+    query: state.searchQuery,
+  });
+
+  const markerPlaces = await placeService.getPlaces({
+    bounds: bounds.pad(0.35),
+    filters: getCurrentFilters(),
+    query: state.searchQuery,
+  });
+
+  renderMarkers(markerPlaces);
+  renderSidePanel();
+}
+
+function getCurrentFilters() {
+  return {
+    type: state.activeType,
+    headquartersOnly: state.headquartersOnly,
+  };
+}
+
+function renderFilterChips() {
+  filterChips.replaceChildren(
+    ...FILTERS.map((filter) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-chip";
+      button.dataset.filter = filter.id;
+      button.setAttribute("aria-pressed", isFilterActive(filter));
+      const chipIcon = filter.iconName && icons[filter.iconName] ? icons[filter.iconName] : filter.label;
+      button.innerHTML = `<span aria-hidden="true">${chipIcon}</span><span>${filter.label}</span>`;
+      button.addEventListener("click", () => {
+        if (filter.kind === "type") {
+          state.activeType = filter.id;
+        } else if (filter.kind === "flag") {
+          state.headquartersOnly = !state.headquartersOnly;
+        }
+        renderFilterChips();
+        refreshMapData();
+      });
+      return button;
+    }),
+  );
+}
+
+function isFilterActive(filter) {
+  if (filter.kind === "type") {
+    return state.activeType === filter.id ? "true" : "false";
+  }
+  return state.headquartersOnly ? "true" : "false";
+}
+
+function renderMarkers(places) {
+  const existingIds = new Set(state.markers.keys());
+  const nextIds = new Set(places.map((place) => place.id));
+
+  for (const id of existingIds) {
+    if (!nextIds.has(id)) {
+      const marker = state.markers.get(id);
+      clusterLayer.removeLayer(marker);
+      state.markers.delete(id);
+    }
+  }
+
+  for (const place of places) {
+    let marker = state.markers.get(place.id);
+    if (!marker) {
+      marker = L.marker([place.latitude, place.longitude], {
+        icon: createPlaceIcon(place),
+        riseOnHover: true,
+        title: place.name,
+      });
+      marker.on("click", () => selectPlace(place.id, { fly: false }));
+      marker.on("mouseover", () => setHoveredPlace(place.id));
+      marker.on("mouseout", () => clearHoveredPlace(place.id));
+      state.markers.set(place.id, marker);
+      clusterLayer.addLayer(marker);
+    }
+    marker.place = place;
+    syncMarkerState(marker, place.id);
+  }
+}
+
+function createPlaceIcon(place) {
+  const type = getTypeMeta(place.type);
+  return L.divIcon({
+    className: "",
+    html: `<div class="place-marker marker-${place.type}" data-place-id="${place.id}"><span class="marker-symbol">${icons[type.iconName]}</span></div>`,
+    iconSize: [36, 44],
+    iconAnchor: [18, 40],
+    popupAnchor: [0, -38],
+  });
+}
+
+function syncMarkerState(marker, placeId) {
+  const element = marker.getElement();
+  if (!element) return;
+  const markerElement = element.querySelector(".place-marker");
+  if (!markerElement) return;
+  markerElement.classList.toggle("is-selected", state.selectedPlaceId === placeId);
+  markerElement.classList.toggle("is-hovered", state.hoveredPlaceId === placeId);
+}
+
+function renderSidePanel() {
+  const selected = getSelectedPlace();
+  if (selected) {
+    renderDetailPanel(selected);
+    return;
+  }
+
+  const center = map.getCenter();
+  const places = state.visiblePlaces
+    .map((place) => ({
+      ...place,
+      distanceMeters: center.distanceTo([place.latitude, place.longitude]),
+    }))
+    .sort((a, b) => a.distanceMeters - b.distanceMeters)
+    .slice(0, MAX_SIDEBAR_RESULTS);
+
+  const header = document.createElement("div");
+  header.className = "panel-header";
+  header.innerHTML = `
+    <p class="panel-kicker">この地図範囲にある施設</p>
+    <div class="panel-title-row">
+      <h2 class="panel-title">周辺スポット</h2>
+      <span class="panel-count">${places.length}件</span>
+    </div>
+  `;
+
+  const list = document.createElement("div");
+  list.className = "panel-list";
+
+  if (!places.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "この範囲には表示できる施設がありません。地図を移動するか、フィルターを変更してください。";
+    empty.style.padding = "12px 10px 18px";
+    list.append(empty);
+  } else {
+    list.replaceChildren(...places.map(createPanelItem));
+  }
+
+  sidePanel.replaceChildren(header, list);
+}
+
+function createPanelItem(place) {
+  const type = getTypeMeta(place.type);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "panel-item";
+  button.dataset.placeId = place.id;
+  button.classList.toggle("is-selected", state.selectedPlaceId === place.id);
+  button.classList.toggle("is-hovered", state.hoveredPlaceId === place.id);
+  button.innerHTML = `
+    <span class="type-badge badge-${place.type}" aria-hidden="true">${icons[type.iconName]}</span>
+    <span>
+      <span class="panel-item-title">${escapeHtml(place.name)}</span>
+      <span class="panel-item-meta">${escapeHtml(place.category)} ・ ${formatDistance(place.distanceMeters)}</span>
+    </span>
+  `;
+  button.addEventListener("mouseenter", () => setHoveredPlace(place.id));
+  button.addEventListener("mouseleave", () => clearHoveredPlace(place.id));
+  button.addEventListener("click", () => selectPlace(place.id, { fly: true }));
+  return button;
+}
+
+function renderDetailPanel(place) {
+  const type = getTypeMeta(place.type);
+  const header = document.createElement("div");
+  header.className = "panel-header";
+  header.innerHTML = `
+    <div class="detail-title-row">
+      <div>
+        <p class="panel-kicker">選択中の施設</p>
+        <h2 class="detail-title">${escapeHtml(place.name)}</h2>
+      </div>
+      <button class="icon-button subtle close-detail-button" type="button" aria-label="詳細を閉じる">
+        <span class="icon close-icon">${icons.close}</span>
+      </button>
+    </div>
+  `;
+  header.querySelector("button").addEventListener("click", () => {
+    state.selectedPlaceId = null;
+    updateAllMarkerStates();
+    renderSidePanel();
+  });
+
+  const body = document.createElement("div");
+  body.className = "detail-body";
+  body.innerHTML = `
+    <div class="detail-topline">
+      <span class="type-badge badge-${place.type}" aria-hidden="true">${icons[type.iconName]}</span>
+      <div>
+        <div><strong>${type.label}</strong>${place.headquarters ? " ・ 本社" : ""}</div>
+        <div class="detail-meta">${escapeHtml(place.category)}</div>
+      </div>
+    </div>
+    ${place.description ? `<p class="detail-description">${escapeHtml(place.description)}</p>` : ""}
+    <div class="detail-section">
+      <h3 class="detail-section-title">基本情報</h3>
+      <dl class="detail-grid">
+        ${detailRow("住所", place.address)}
+        ${detailRow("証券コード", place.stockCode)}
+        ${detailRow("法人番号", place.corporateNumber)}
+        ${detailRow("資本金", place.capital)}
+        ${detailRow("従業員数", place.employees)}
+        ${detailRow("出典", place.source)}
+      </dl>
+    </div>
+    <div class="detail-actions">
+      ${place.website ? `<a class="text-button primary" href="${place.website}" target="_blank" rel="noopener noreferrer"><span class="icon">${icons.external}</span>公式サイト</a>` : ""}
+      <button id="visitedButton" class="text-button" type="button"><span class="icon">${icons.check}</span>${state.visited.has(place.id) ? "訪問済み" : "訪問済みにする"}</button>
+    </div>
+  `;
+
+  const visitedButton = body.querySelector("#visitedButton");
+  visitedButton.addEventListener("click", () => toggleVisited(place.id));
+
+  sidePanel.replaceChildren(header, body);
+}
+
+function renderSuggestions() {
+  const query = searchInput.value.trim();
+  if (!query) {
+    suggestions.classList.add("hidden");
+    suggestions.replaceChildren();
+    return;
+  }
+
+  const results = placeService.searchPlaces(query, {
+    filters: getCurrentFilters(),
+    limit: MAX_SUGGESTIONS,
+  });
+
+  if (!results.length) {
+    suggestions.classList.remove("hidden");
+    suggestions.innerHTML = '<p class="empty-state" style="padding:12px 14px;margin:0;">候補が見つかりません</p>';
+    return;
+  }
+
+  suggestions.replaceChildren(...results.map(createSuggestionItem));
+  suggestions.classList.remove("hidden");
+}
+
+function createSuggestionItem(place) {
+  const type = getTypeMeta(place.type);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "suggestion-item";
+  button.setAttribute("role", "option");
+  button.innerHTML = `
+    <span class="type-badge badge-${place.type}" aria-hidden="true">${icons[type.iconName]}</span>
+    <span>
+      <span class="suggestion-title">${escapeHtml(place.name)}</span>
+      <span class="suggestion-meta">${escapeHtml(place.category)} ・ ${escapeHtml(place.address)}</span>
+    </span>
+  `;
+  button.addEventListener("click", () => {
+    searchInput.value = place.name;
+    state.searchQuery = place.name;
+    clearSearchButton.classList.remove("hidden");
+    suggestions.classList.add("hidden");
+    selectPlace(place.id, { fly: true, zoom: SELECTED_ZOOM });
+  });
+  return button;
+}
+
+function selectPlace(placeId, options = {}) {
+  const place = state.allPlaces.find((item) => item.id === placeId);
+  if (!place) return;
+
+  state.selectedPlaceId = placeId;
+  if (options.fly) {
+    map.flyTo([place.latitude, place.longitude], options.zoom || Math.max(map.getZoom(), SELECTED_ZOOM), {
+      duration: 0.65,
+    });
+  }
+  updateAllMarkerStates();
+  renderSidePanel();
+}
+
+function setHoveredPlace(placeId) {
+  state.hoveredPlaceId = placeId;
+  updateAllMarkerStates();
+  updatePanelHoverState();
+}
+
+function clearHoveredPlace(placeId) {
+  if (state.hoveredPlaceId !== placeId) return;
+  state.hoveredPlaceId = null;
+  updateAllMarkerStates();
+  updatePanelHoverState();
+}
+
+function updateAllMarkerStates() {
+  for (const [placeId, marker] of state.markers.entries()) {
+    syncMarkerState(marker, placeId);
+  }
+}
+
+function updatePanelHoverState() {
+  sidePanel.querySelectorAll(".panel-item").forEach((item) => {
+    item.classList.toggle("is-hovered", item.dataset.placeId === state.hoveredPlaceId);
+  });
+}
+
+function getSelectedPlace() {
+  if (!state.selectedPlaceId) return null;
+  return state.allPlaces.find((place) => place.id === state.selectedPlaceId) || null;
+}
+
+function handleLocate() {
+  if (!navigator.geolocation) {
+    showToast("このブラウザでは現在地を取得できません。");
+    return;
+  }
+
+  locateButton.setAttribute("aria-busy", "true");
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      locateButton.removeAttribute("aria-busy");
+      map.flyTo([position.coords.latitude, position.coords.longitude], 15, { duration: 0.7 });
+    },
+    () => {
+      locateButton.removeAttribute("aria-busy");
+      showToast("現在地を取得できませんでした。ブラウザの位置情報設定を確認してください。");
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+  );
+}
+
+function toggleVisited(placeId) {
+  if (state.visited.has(placeId)) {
+    state.visited.delete(placeId);
+  } else {
+    state.visited.add(placeId);
+  }
+  localStorage.setItem("corporation-map-visited", JSON.stringify([...state.visited]));
+  const selected = getSelectedPlace();
+  if (selected) renderDetailPanel(selected);
+}
+
+function applyInitialTheme() {
+  const saved = localStorage.getItem("corporation-map-theme");
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  const theme = saved || (prefersDark ? "dark" : "light");
+  app.classList.toggle("dark", theme === "dark");
+  setBaseLayer(theme);
+  themeIcon.innerHTML = theme === "dark" ? icons.sun : icons.moon;
+}
+
+function toggleTheme() {
+  const dark = !app.classList.contains("dark");
+  app.classList.toggle("dark", dark);
+  const theme = dark ? "dark" : "light";
+  localStorage.setItem("corporation-map-theme", theme);
+  setBaseLayer(theme);
+  themeIcon.innerHTML = dark ? icons.sun : icons.moon;
+}
+
+function setBaseLayer(theme) {
+  const nextLayer = baseLayers[theme] || baseLayers.light;
+  if (activeBaseLayer === nextLayer) return;
+  if (activeBaseLayer) map.removeLayer(activeBaseLayer);
+  activeBaseLayer = nextLayer;
+  activeBaseLayer.addTo(map);
+  scheduleMapResize();
+}
+
+function showToast(message) {
+  const existing = document.querySelector(".toast");
+  existing?.remove();
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  app.append(toast);
+  setTimeout(() => toast.remove(), 3800);
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return `${Math.round(meters / 10) * 10}m`;
+  return `${(meters / 1000).toFixed(1)}km`;
+}
+
+function detailRow(label, value) {
+  if (!value) return "";
+  return `<dt>${label}</dt><dd>${escapeHtml(String(value))}</dd>`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}

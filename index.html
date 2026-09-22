@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="日本全国の企業・官公庁・公共機関を地図上から探索できるWebアプリ"
+    />
+    <title>Corporation Map</title>
+    <link rel="preconnect" href="https://a.tile.openstreetmap.org" />
+    <link rel="preconnect" href="https://b.tile.openstreetmap.org" />
+    <link rel="preconnect" href="https://c.tile.openstreetmap.org" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <main id="map" aria-label="企業・官公庁探索マップ"></main>
+
+      <section class="search-stack" aria-label="検索とフィルター">
+        <div class="search-box">
+          <span class="search-icon" aria-hidden="true"></span>
+          <input
+            id="searchInput"
+            type="search"
+            autocomplete="off"
+            placeholder="企業・官公庁を検索"
+            aria-label="企業名、法人名、官公庁名、住所で検索"
+          />
+          <button id="clearSearchButton" class="icon-button subtle hidden" type="button" aria-label="検索をクリア">
+            <span class="icon close-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="suggestions" class="suggestions hidden" role="listbox" aria-label="検索候補"></div>
+        <div id="filterChips" class="filter-chips" aria-label="カテゴリフィルター"></div>
+      </section>
+
+      <aside id="sidePanel" class="side-panel" aria-live="polite"></aside>
+
+      <div class="map-actions" aria-label="地図操作">
+        <button id="locateButton" class="map-action-button" type="button" aria-label="現在地へ移動">
+          <span class="icon locate-icon" aria-hidden="true"></span>
+        </button>
+        <button id="zoomInButton" class="map-action-button" type="button" aria-label="拡大">
+          <span class="icon plus-icon" aria-hidden="true"></span>
+        </button>
+        <button id="zoomOutButton" class="map-action-button" type="button" aria-label="縮小">
+          <span class="icon minus-icon" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="表示テーマを切り替え">
+        <span id="themeIcon" class="icon sun-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
