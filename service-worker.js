@@ -1,4 +1,4 @@
-const CACHE_NAME = "corporation-map-v2";
+const CACHE_NAME = "corporation-map-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,7 +14,8 @@ const APP_SHELL = [
   "./src/providers/GovernmentProvider.js",
   "./src/providers/OpenStreetMapProvider.js",
   "./src/data/mockPlaces.js",
-  "./src/data/nikkei225Companies.js"
+  "./src/data/nikkei225Companies.js",
+  "./src/data/nikkei225Headquarters.js"
 ];
 
 self.addEventListener("install", (event) => {

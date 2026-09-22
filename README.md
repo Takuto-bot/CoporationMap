@@ -22,6 +22,7 @@
     ├── app.js
     ├── styles.css
     ├── data/nikkei225Companies.js
+    ├── data/nikkei225Headquarters.js
     ├── data/mockPlaces.js
     ├── models/place.js
     ├── providers
@@ -37,11 +38,17 @@
 
 地図タイルはOpenStreetMapを使用しています。Dark Modeでは同じOpenStreetMapタイルの明度をCSSで調整しています。
 
-初期MVPの施設データは `src/data/mockPlaces.js` から読み込みます。企業データは `src/data/nikkei225Companies.js` に日経225構成銘柄225社を収録しています。日経225の構成銘柄はNikkei Indexes公式の構成銘柄ページ（Update: Sep/18/2026）を基準にしています。
+初期データは `src/data/mockPlaces.js` から読み込みます。企業データは `src/data/nikkei225Companies.js` に日経225構成銘柄225社を収録しています。日経225の構成銘柄はNikkei Indexes公式の構成銘柄ページ（Update: Sep/18/2026）を基準にしています。
 
 官公庁データは少量のMock Dataです。将来的には政府オープンデータまたはOpenStreetMap POIへ接続する想定です。
 
-日経225データのうち、詳細住所をまだ持っていない銘柄は本社所在地エリアの代表点付近に配置しています。今後、Gビズインフォや法人番号公表サイト、各社IRの所在地情報と接続して精度を上げる前提です。
+日経225企業の本社住所は、金融庁EDINETコードリスト（2026-09-22取得）の証券コード・所在地・法人番号を使用しています。住所は国土地理院の住所検索で座標化し、`src/data/nikkei225Headquarters.js` に固定しているため、アプリ起動時の外部ジオコーディングは発生しません。確認済みの企業は本社建物中心の座標を優先し、それ以外も市区町村の代表点ではなく番地・号を含む公式所在地へ配置しています。
+
+本社移転を反映する場合は、PowerShellで次を実行します。最新のEDINETコードリストを取得し、225社すべての住所が揃った場合だけデータファイルを更新します。
+
+```powershell
+.\scripts\update-headquarters.ps1
+```
 
 ## Placeモデル
 
@@ -105,10 +112,6 @@ python -m http.server 4173
 - Provider統合・検索・フィルター: `src/services/PlaceService.js`
 
 現在はUI体験を優先し、MockProviderで `Map -> Search -> Filter -> Marker -> Side Panel -> Detail Panel` が一通り動く状態にしています。
-# 企業・官公庁マップ
-
-日本全国の企業・官公庁を地図上から探せる、個人利用向けのWebアプリです。日経平均株価の構成225銘柄と官公庁を収録しています。
-
 ## スマホで使う
 
 GitHub Pagesの公開URLをスマートフォンで開き、ホーム画面に追加してください。以後はホーム画面の「企業マップ」アイコンから、通常のアプリのように起動できます。
@@ -117,9 +120,3 @@ GitHub Pagesの公開URLをスマートフォンで開き、ホーム画面に�
 - Android: Chromeのメニューから「アプリをインストール」または「ホーム画面に追加」
 
 初回表示後はアプリ本体を端末にキャッシュします。地図表示や最新の地図データには通信が必要です。
-
-## ローカル起動
-
-```powershell
-npm run dev
-```

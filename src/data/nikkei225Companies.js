@@ -1,222 +1,6 @@
-const SOURCE = "Nikkei Indexes: Nikkei Stock Average (Nikkei 225), updated Sep/18/2026";
+import { NIKKEI_225_HEADQUARTERS } from "./nikkei225Headquarters.js";
 
-const HUBS = {
-  marunouchi: { label: "東京都千代田区丸の内・大手町エリア", latitude: 35.6821, longitude: 139.7649 },
-  nihonbashi: { label: "東京都中央区日本橋エリア", latitude: 35.6841, longitude: 139.7745 },
-  shinagawa: { label: "東京都港区港南・品川エリア", latitude: 35.6297, longitude: 139.7407 },
-  shiodome: { label: "東京都港区東新橋・汐留エリア", latitude: 35.6641, longitude: 139.7608 },
-  roppongi: { label: "東京都港区六本木・赤坂エリア", latitude: 35.664, longitude: 139.732 },
-  shibuya: { label: "東京都渋谷区渋谷エリア", latitude: 35.6587, longitude: 139.7016 },
-  shinjuku: { label: "東京都新宿区西新宿エリア", latitude: 35.6896, longitude: 139.6921 },
-  toyosu: { label: "東京都江東区豊洲エリア", latitude: 35.6549, longitude: 139.7967 },
-  chiba: { label: "千葉県千葉市・浦安市エリア", latitude: 35.6073, longitude: 140.1064 },
-  yokohama: { label: "神奈川県横浜市エリア", latitude: 35.4579, longitude: 139.6323 },
-  kawasaki: { label: "神奈川県川崎市エリア", latitude: 35.5309, longitude: 139.7031 },
-  nagoya: { label: "愛知県名古屋市エリア", latitude: 35.1709, longitude: 136.8815 },
-  toyota: { label: "愛知県豊田市エリア", latitude: 35.0545, longitude: 137.1566 },
-  osaka: { label: "大阪府大阪市エリア", latitude: 34.6937, longitude: 135.5023 },
-  kadoma: { label: "大阪府門真市エリア", latitude: 34.7382, longitude: 135.5828 },
-  kyoto: { label: "京都府京都市エリア", latitude: 34.9694, longitude: 135.7568 },
-  kobe: { label: "兵庫県神戸市エリア", latitude: 34.6901, longitude: 135.1955 },
-  hiroshima: { label: "広島県広島市・府中町エリア", latitude: 34.3955, longitude: 132.4596 },
-  fukuoka: { label: "福岡県福岡市エリア", latitude: 33.5902, longitude: 130.4017 },
-  hamamatsu: { label: "静岡県浜松市エリア", latitude: 34.7108, longitude: 137.7261 },
-  saitama: { label: "埼玉県さいたま市エリア", latitude: 35.8617, longitude: 139.6455 },
-  kusatsu: { label: "滋賀県草津市エリア", latitude: 35.0183, longitude: 135.9592 },
-};
-
-const HUB_BY_CATEGORY = {
-  "水産・農林業": "toyosu",
-  "鉱業": "akasaka",
-  "建設業": "shinjuku",
-  "食料品": "nihonbashi",
-  "繊維製品": "osaka",
-  "パルプ・紙": "marunouchi",
-  "化学": "nihonbashi",
-  "医薬品": "nihonbashi",
-  "石油・石炭製品": "marunouchi",
-  "ゴム製品": "nihonbashi",
-  "ガラス・土石製品": "nihonbashi",
-  "鉄鋼": "marunouchi",
-  "非鉄金属": "marunouchi",
-  "金属製品": "shinagawa",
-  "機械": "marunouchi",
-  "電気機器": "shinagawa",
-  "輸送用機器": "toyota",
-  "精密機器": "shinjuku",
-  "その他製品": "kyoto",
-  "情報・通信業": "shibuya",
-  "卸売業": "marunouchi",
-  "小売業": "nihonbashi",
-  "銀行業": "marunouchi",
-  "証券、商品先物取引業": "nihonbashi",
-  "保険業": "marunouchi",
-  "その他金融業": "nihonbashi",
-  "不動産業": "marunouchi",
-  "陸運業": "shinjuku",
-  "海運業": "marunouchi",
-  "空運業": "shinagawa",
-  "電気・ガス業": "marunouchi",
-  "サービス業": "roppongi",
-};
-
-const HUB_BY_CODE = {
-  "1332": "toyosu",
-  "1605": "akasaka",
-  "1925": "osaka",
-  "1928": "osaka",
-  "2269": "nihonbashi",
-  "2282": "osaka",
-  "2501": "shibuya",
-  "2502": "sumida",
-  "2801": "chiba",
-  "3401": "osaka",
-  "3402": "nihonbashi",
-  "3407": "marunouchi",
-  "3436": "shinagawa",
-  "4005": "nihonbashi",
-  "4043": "yamaguchi",
-  "4061": "nihonbashi",
-  "4062": "ogaki",
-  "4063": "marunouchi",
-  "4188": "marunouchi",
-  "4208": "tokyo",
-  "4502": "nihonbashi",
-  "4503": "nihonbashi",
-  "4507": "osaka",
-  "4519": "nihonbashi",
-  "4523": "koishikawa",
-  "4568": "nihonbashi",
-  "4578": "tokyo",
-  "4901": "tokyo",
-  "4911": "ginza",
-  "5101": "hiratsuka",
-  "5108": "nihonbashi",
-  "5201": "marunouchi",
-  "5214": "otsu",
-  "5233": "bunkyo",
-  "5301": "aoyama",
-  "5332": "kokura",
-  "5333": "nagoya",
-  "5401": "marunouchi",
-  "5406": "kobe",
-  "543A": "toyota",
-  "5631": "shinagawa",
-  "5706": "osaki",
-  "5711": "marunouchi",
-  "5713": "shinbashi",
-  "5714": "akihabara",
-  "5801": "marunouchi",
-  "5802": "osaka",
-  "5803": "kiba",
-  "5831": "shizuoka",
-  "6103": "nagoya",
-  "6113": "isehara",
-  "6273": "marunouchi",
-  "6301": "akasaka",
-  "6305": "taito",
-  "6326": "osaka",
-  "6367": "osaka",
-  "6473": "kariya",
-  "6506": "kitakyushu",
-  "6645": "kyoto",
-  "6702": "shiodome",
-  "6724": "suwa",
-  "6752": "kadoma",
-  "6753": "sakai",
-  "6758": "shinagawa",
-  "6762": "nihonbashi",
-  "6770": "otemachi",
-  "6841": "musashino",
-  "6861": "osaka",
-  "6902": "kariya",
-  "6963": "kyoto",
-  "6971": "kyoto",
-  "6981": "kyoto",
-  "7012": "kobe",
-  "7201": "yokohama",
-  "7202": "yokohama",
-  "7203": "toyota",
-  "7211": "tamachi",
-  "7261": "hiroshima",
-  "7267": "aoyama",
-  "7269": "hamamatsu",
-  "7270": "ebisu",
-  "7272": "iwata",
-  "7453": "tokyo",
-  "7532": "shibuya",
-  "7752": "omiya",
-  "7832": "tamachi",
-  "7951": "hamamatsu",
-  "7974": "kyoto",
-  "8001": "kitaoyama",
-  "8015": "nagoya",
-  "8035": "akasaka",
-  "8058": "marunouchi",
-  "8233": "nihonbashi",
-  "8267": "chiba",
-  "8331": "chiba",
-  "8354": "fukuoka",
-  "8601": "marunouchi",
-  "8604": "nihonbashi",
-  "8697": "nihonbashi",
-  "8766": "marunouchi",
-  "9001": "sumida",
-  "9005": "shibuya",
-  "9007": "shinjuku",
-  "9008": "shinjuku",
-  "9009": "chiba",
-  "9020": "shinjuku",
-  "9021": "osaka",
-  "9022": "nagoya",
-  "9201": "shinagawa",
-  "9202": "shiodome",
-  "9434": "takeshiba",
-  "9502": "nagoya",
-  "9503": "osaka",
-  "9532": "osaka",
-  "9602": "hibiya",
-  "9766": "ginza",
-  "9843": "sapporo",
-  "9983": "yamaguchi",
-  "9984": "takeshiba",
-};
-
-Object.assign(HUBS, {
-  akasaka: { label: "東京都港区赤坂エリア", latitude: 35.6723, longitude: 139.7354 },
-  sumida: { label: "東京都墨田区エリア", latitude: 35.7101, longitude: 139.8107 },
-  yamaguchi: { label: "山口県周南市エリア", latitude: 34.0559, longitude: 131.8064 },
-  ogaki: { label: "岐阜県大垣市エリア", latitude: 35.3594, longitude: 136.6128 },
-  tokyo: { label: "東京都港区・中央区エリア", latitude: 35.6655, longitude: 139.755 },
-  ginza: { label: "東京都中央区銀座エリア", latitude: 35.6719, longitude: 139.7648 },
-  hiratsuka: { label: "神奈川県平塚市エリア", latitude: 35.3356, longitude: 139.3495 },
-  otsu: { label: "滋賀県大津市エリア", latitude: 35.0179, longitude: 135.8546 },
-  bunkyo: { label: "東京都文京区エリア", latitude: 35.7081, longitude: 139.7522 },
-  aoyama: { label: "東京都港区青山エリア", latitude: 35.6725, longitude: 139.7236 },
-  kokura: { label: "福岡県北九州市小倉エリア", latitude: 33.8834, longitude: 130.8751 },
-  osaki: { label: "東京都品川区大崎エリア", latitude: 35.6197, longitude: 139.7286 },
-  shinbashi: { label: "東京都港区新橋エリア", latitude: 35.6663, longitude: 139.7586 },
-  akihabara: { label: "東京都千代田区秋葉原エリア", latitude: 35.6984, longitude: 139.773 },
-  kiba: { label: "東京都江東区木場エリア", latitude: 35.6695, longitude: 139.8059 },
-  shizuoka: { label: "静岡県静岡市エリア", latitude: 34.9756, longitude: 138.3828 },
-  isehara: { label: "神奈川県伊勢原市エリア", latitude: 35.4029, longitude: 139.3149 },
-  taito: { label: "東京都台東区エリア", latitude: 35.7126, longitude: 139.78 },
-  kariya: { label: "愛知県刈谷市エリア", latitude: 34.9893, longitude: 137.0021 },
-  kitakyushu: { label: "福岡県北九州市エリア", latitude: 33.8834, longitude: 130.8751 },
-  otemachi: { label: "東京都千代田区大手町エリア", latitude: 35.6862, longitude: 139.7639 },
-  musashino: { label: "東京都武蔵野市エリア", latitude: 35.7177, longitude: 139.5661 },
-  tamachi: { label: "東京都港区芝浦・田町エリア", latitude: 35.6457, longitude: 139.7476 },
-  ebisu: { label: "東京都渋谷区恵比寿エリア", latitude: 35.6467, longitude: 139.7101 },
-  iwata: { label: "静岡県磐田市エリア", latitude: 34.7179, longitude: 137.8515 },
-  kitaoyama: { label: "東京都港区北青山エリア", latitude: 35.6702, longitude: 139.7175 },
-  omiya: { label: "埼玉県さいたま市大宮エリア", latitude: 35.906, longitude: 139.6237 },
-  takeshiba: { label: "東京都港区竹芝エリア", latitude: 35.6542, longitude: 139.7621 },
-  hibiya: { label: "東京都千代田区日比谷エリア", latitude: 35.6736, longitude: 139.759 },
-  sapporo: { label: "北海道札幌市エリア", latitude: 43.0618, longitude: 141.3545 },
-  suwa: { label: "長野県諏訪市エリア", latitude: 36.0391, longitude: 138.1142 },
-  sakai: { label: "大阪府堺市エリア", latitude: 34.5733, longitude: 135.4828 },
-  koishikawa: { label: "東京都文京区小石川エリア", latitude: 35.7086, longitude: 139.7518 },
-});
+const SOURCE = "日経225構成銘柄 / 金融庁EDINET本社所在地 / 国土地理院住所検索";
 
 const KNOWN_OVERRIDES = {
   "6501": {
@@ -519,34 +303,33 @@ const NIKKEI_225 = [
   ["2914", "日本たばこ産業", "食料品"],
 ];
 
-export const nikkei225Companies = uniqueByCode(NIKKEI_225).map(([stockCode, name, category], index) => {
-  const hub = getHub(stockCode, category);
-  const offset = getOffset(stockCode, index, hub.latitude);
+export const nikkei225Companies = uniqueByCode(NIKKEI_225).map(([stockCode, name, category]) => {
+  const headquarters = NIKKEI_225_HEADQUARTERS[stockCode];
+  if (!headquarters) {
+    throw new Error(`本社所在地が未登録です: ${stockCode} ${name}`);
+  }
+
   const preciseOverride = KNOWN_OVERRIDES[stockCode] || {};
-  const base = {
-    id: `company:nikkei225:${stockCode}`,
-    name,
-    type: "company",
-    category: `日経225 / ${category}`,
-    address: `${hub.label}（本社エリア代表点）`,
-    latitude: roundCoordinate(hub.latitude + offset.latitude),
-    longitude: roundCoordinate(hub.longitude + offset.longitude),
-    description:
-      "日経平均株価（日経225）の構成銘柄です。詳細な住所が未登録の銘柄は、本社所在地エリアの代表点付近に配置しています。",
-    source: SOURCE,
-    headquarters: true,
-    stockCode,
-    locationPrecision: "area",
-    searchAliases: `${stockCode} ${name} ${category} 日経225`,
-  };
+  const latitude = preciseOverride.latitude || headquarters.latitude;
+  const longitude = preciseOverride.longitude || headquarters.longitude;
 
   return {
-    ...base,
-    ...preciseOverride,
+    id: `company:nikkei225:${stockCode}`,
+    name: preciseOverride.name || headquarters.officialName || name,
+    type: "company",
+    category: `日経225 / ${category}`,
+    address: preciseOverride.address || headquarters.address,
+    latitude,
+    longitude,
+    website: preciseOverride.website,
+    description:
+      "日経平均株価（日経225）の構成銘柄です。金融庁EDINETの所在地を基準に、本社住所へピンを配置しています。",
     source: SOURCE,
-    stockCode,
     headquarters: true,
-    locationPrecision: preciseOverride.latitude ? "exact" : "area",
+    stockCode,
+    corporateNumber: headquarters.corporateNumber,
+    locationPrecision: preciseOverride.latitude ? "building" : "address",
+    searchAliases: `${stockCode} ${name} ${headquarters.officialName} ${category} 日経225`,
   };
 });
 
@@ -554,23 +337,4 @@ function uniqueByCode(rows) {
   const byCode = new Map();
   rows.forEach((row) => byCode.set(row[0], row));
   return [...byCode.values()];
-}
-
-function getHub(stockCode, category) {
-  const hubKey = HUB_BY_CODE[stockCode] || HUB_BY_CATEGORY[category] || "marunouchi";
-  return HUBS[hubKey] || HUBS.marunouchi;
-}
-
-function getOffset(stockCode, index, latitude) {
-  const numericSeed = Number(String(stockCode).replace(/\D/g, "")) || index + 1;
-  const angle = ((numericSeed * 137.508 + index * 19) % 360) * (Math.PI / 180);
-  const radius = 0.0025 + (numericSeed % 9) * 0.0012;
-  return {
-    latitude: Math.cos(angle) * radius,
-    longitude: (Math.sin(angle) * radius) / Math.max(0.55, Math.cos(latitude * (Math.PI / 180))),
-  };
-}
-
-function roundCoordinate(value) {
-  return Number(value.toFixed(6));
 }
