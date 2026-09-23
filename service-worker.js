@@ -1,4 +1,4 @@
-const CACHE_NAME = "corporation-map-v7";
+const CACHE_NAME = "corporation-map-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,8 @@ const APP_SHELL = [
   "./src/styles.css",
   "./src/models/place.js",
   "./src/services/PlaceService.js",
+  "./src/services/TerritoryEngine.js",
+  "./src/vendor/turf.min.js",
   "./src/providers/PlaceProvider.js",
   "./src/providers/MockPlaceProvider.js",
   "./src/providers/CompanyProvider.js",

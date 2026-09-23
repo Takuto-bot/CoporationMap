@@ -1,12 +1,40 @@
+import "./vendor/turf.min.js";
 import { PlaceService } from "./services/PlaceService.js";
 import { MockPlaceProvider } from "./providers/MockPlaceProvider.js";
 import { TYPE_META, FILTERS, getTypeMeta } from "./models/place.js";
+import {
+  TERRITORY_DEFAULTS,
+  detectHistoricClosure,
+  detectSelfClosure,
+  distanceMeters,
+  findNearestTrackContact,
+} from "./services/TerritoryEngine.js";
+
+const turfApi = globalThis.turf;
 
 const JAPAN_CENTER = [35.681236, 139.767125];
 const DEFAULT_ZOOM = 12;
 const SELECTED_ZOOM = 16;
 const MAX_SIDEBAR_RESULTS = 24;
 const MAX_SUGGESTIONS = 8;
+const CLOSE_THRESHOLD_METERS = 10;
+const RECENT_POINT_EXCLUSION = 20;
+const MINIMUM_POINT_DISTANCE_METERS = 3;
+const MINIMUM_POINT_INTERVAL_MILLISECONDS = 2000;
+const MAXIMUM_ACCEPTED_ACCURACY_METERS = 50;
+const GPS_TRACKS_STORAGE_KEY = "corporation-map-gps-tracks-v1";
+const ACTIVE_TRACK_STORAGE_KEY = "corporation-map-active-gps-track-v1";
+const TERRITORIES_STORAGE_KEY = "corporation-map-territories-v1";
+const TERRITORY_OPTIONS = {
+  ...TERRITORY_DEFAULTS,
+  closeThresholdMeters: CLOSE_THRESHOLD_METERS,
+  recentPointExclusion: RECENT_POINT_EXCLUSION,
+};
+const GPS_OPTIONS = {
+  enableHighAccuracy: true,
+  maximumAge: 1000,
+  timeout: 15000,
+};
 const mobileLayoutQuery = window.matchMedia("(max-width: 760px)");
 
 const app = document.querySelector("#app");
@@ -20,6 +48,12 @@ const zoomInButton = document.querySelector("#zoomInButton");
 const zoomOutButton = document.querySelector("#zoomOutButton");
 const themeToggle = document.querySelector("#themeToggle");
 const themeIcon = document.querySelector("#themeIcon");
+const territoryControl = document.querySelector("#territoryControl");
+const trackingToggle = document.querySelector("#trackingToggle");
+const trackingToggleLabel = document.querySelector("#trackingToggleLabel");
+const trackingStatus = document.querySelector("#trackingStatus");
+const territoryArea = document.querySelector("#territoryArea");
+const trackingDistance = document.querySelector("#trackingDistance");
 
 const icons = {
   search:
@@ -42,6 +76,10 @@ const icons = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>',
   chevronUp:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>',
+  play:
+    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.7v12.6c0 .8.9 1.3 1.6.8l9-6.3a1 1 0 0 0 0-1.6l-9-6.3A1 1 0 0 0 8 5.7Z"></path></svg>',
+  stop:
+    '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"></path></svg>',
   headquarters:
@@ -57,6 +95,7 @@ document.querySelector(".close-icon").innerHTML = icons.close;
 document.querySelector(".locate-icon").innerHTML = icons.locate;
 document.querySelector(".plus-icon").innerHTML = icons.plus;
 document.querySelector(".minus-icon").innerHTML = icons.minus;
+document.querySelector(".tracking-icon").innerHTML = icons.play;
 
 const placeService = new PlaceService({
   providers: [new MockPlaceProvider()],
@@ -100,6 +139,19 @@ const clusterLayer = L.markerClusterGroup({
 
 map.addLayer(clusterLayer);
 
+const territoryPolygonLayer = L.featureGroup().addTo(map);
+const savedTrackLayer = L.featureGroup().addTo(map);
+const activeTrackLine = L.polyline([], {
+  color: "#e5484d",
+  weight: 5,
+  opacity: 0.94,
+  lineCap: "round",
+  lineJoin: "round",
+  interactive: false,
+}).addTo(map);
+let locationMarker = null;
+let accuracyCircle = null;
+
 const scheduleMapResize = () => {
   window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
   window.setTimeout(() => map.invalidateSize({ pan: false }), 220);
@@ -123,15 +175,32 @@ const state = {
   markers: new Map(),
   mobileSheetStage: "peek",
   isAnimatingToPlace: false,
+  tracking: false,
+  watchId: null,
+  wakeLock: null,
+  activeTrack: null,
+  activeTrailCoordinates: [],
+  sessionReferenceTracks: [],
+  historicContactAnchor: null,
+  trackingDistanceMeters: 0,
+  lastAccuracyMeters: null,
+  trackingMessage: "GPS OFF",
+  followTracking: true,
+  territories: loadStoredArray(TERRITORIES_STORAGE_KEY),
+  savedTracks: loadStoredArray(GPS_TRACKS_STORAGE_KEY),
 };
 
 init();
 
 async function init() {
+  territoryControl.dataset.engineReady = turfApi ? "true" : "false";
   applyInitialTheme();
   setMobileSheetStage("peek", { animate: false });
   renderFilterChips();
   bindEvents();
+  recoverInterruptedTrack();
+  renderTerritoryLayers();
+  renderTerritoryHud();
   state.allPlaces = await placeService.getPlaces();
   await refreshMapData();
   renderSidePanel();
@@ -141,7 +210,10 @@ function bindEvents() {
   map.on("moveend zoomend", () => {
     refreshMapData();
   });
-  map.on("dragstart", minimizeSheetForMapInteraction);
+  map.on("dragstart", () => {
+    minimizeSheetForMapInteraction();
+    if (state.tracking) state.followTracking = false;
+  });
   map.on("zoomstart", minimizeSheetForMapInteraction);
   mobileLayoutQuery.addEventListener("change", () => {
     setMobileSheetStage("peek", { animate: false });
@@ -172,10 +244,17 @@ function bindEvents() {
     searchInput.focus();
   });
 
-  locateButton.addEventListener("click", handleLocate);
+  locateButton.addEventListener("click", () => {
+    if (state.tracking) state.followTracking = true;
+    handleLocate();
+  });
   zoomInButton.addEventListener("click", () => map.zoomIn());
   zoomOutButton.addEventListener("click", () => map.zoomOut());
   themeToggle.addEventListener("click", toggleTheme);
+  trackingToggle.addEventListener("click", toggleTracking);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.tracking) requestTrackingWakeLock();
+  });
 }
 
 async function refreshMapData() {
@@ -666,6 +745,355 @@ function setMobileSheetStage(stage, { animate = true } = {}) {
   if (!animate) window.setTimeout(() => sidePanel.classList.remove("without-sheet-animation"), 0);
 }
 
+function toggleTracking() {
+  if (state.tracking) {
+    stopTracking();
+  } else {
+    startTracking();
+  }
+}
+
+function startTracking() {
+  if (!navigator.geolocation) {
+    showToast("この端末ではGPSを利用できません。");
+    return;
+  }
+  if (!turfApi) {
+    showToast("領域判定ライブラリを読み込めませんでした。通信状態を確認してください。");
+    return;
+  }
+
+  const startedAt = new Date().toISOString();
+  state.tracking = true;
+  state.followTracking = true;
+  state.trackingDistanceMeters = 0;
+  state.lastAccuracyMeters = null;
+  state.trackingMessage = "GPS接続中";
+  state.activeTrack = {
+    id: `track:${startedAt}:${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+    startedAt,
+    endedAt: null,
+    coordinates: [],
+    samples: [],
+  };
+  state.activeTrailCoordinates = [];
+  state.sessionReferenceTracks = [];
+  state.historicContactAnchor = null;
+  activeTrackLine.setLatLngs([]);
+  renderTerritoryHud();
+  requestTrackingWakeLock();
+
+  state.watchId = navigator.geolocation.watchPosition(
+    handleTrackingPosition,
+    handleTrackingError,
+    GPS_OPTIONS,
+  );
+}
+
+function stopTracking({ save = true, notify = true } = {}) {
+  if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
+  state.watchId = null;
+
+  if (save && state.activeTrack?.coordinates.length >= 2) {
+    state.activeTrack.endedAt = new Date().toISOString();
+    state.savedTracks.push(state.activeTrack);
+    persistJson(GPS_TRACKS_STORAGE_KEY, state.savedTracks);
+  }
+
+  localStorage.removeItem(ACTIVE_TRACK_STORAGE_KEY);
+  state.tracking = false;
+  state.trackingMessage = "GPS OFF";
+  state.activeTrack = null;
+  state.activeTrailCoordinates = [];
+  state.sessionReferenceTracks = [];
+  state.historicContactAnchor = null;
+  activeTrackLine.setLatLngs([]);
+  releaseTrackingWakeLock();
+  renderSavedTracks();
+  renderTerritoryHud();
+  if (notify) showToast("GPS軌跡を保存しました。");
+}
+
+function handleTrackingPosition(position) {
+  const { latitude, longitude, accuracy } = position.coords;
+  const sampleTimestamp = position.timestamp || Date.now();
+  const coordinate = [roundCoordinate(longitude), roundCoordinate(latitude)];
+  state.lastAccuracyMeters = accuracy;
+  updateLocationVisualization(coordinate, accuracy);
+
+  if (accuracy > MAXIMUM_ACCEPTED_ACCURACY_METERS) {
+    state.trackingMessage = `精度待ち ±${Math.round(accuracy)}m`;
+    renderTerritoryHud();
+    return;
+  }
+
+  const previousSample = state.activeTrack?.samples.at(-1);
+  if (
+    previousSample &&
+    sampleTimestamp - Date.parse(previousSample.timestamp) < MINIMUM_POINT_INTERVAL_MILLISECONDS
+  ) {
+    state.trackingMessage = `記録中 ±${Math.round(accuracy)}m`;
+    renderTerritoryHud();
+    return;
+  }
+
+  const previousCoordinate = state.activeTrack?.coordinates.at(-1);
+  if (previousCoordinate) {
+    const movedMeters = distanceMeters(turfApi, previousCoordinate, coordinate);
+    if (movedMeters < MINIMUM_POINT_DISTANCE_METERS) {
+      state.trackingMessage = `記録中 ±${Math.round(accuracy)}m`;
+      renderTerritoryHud();
+      return;
+    }
+    state.trackingDistanceMeters += movedMeters;
+  }
+
+  const isFirstPoint = !state.activeTrack.coordinates.length;
+  state.activeTrack.coordinates.push(coordinate);
+  state.activeTrack.samples.push({
+    longitude: coordinate[0],
+    latitude: coordinate[1],
+    accuracy: Math.round(accuracy),
+    timestamp: new Date(sampleTimestamp).toISOString(),
+  });
+  state.activeTrailCoordinates.push(coordinate);
+  state.trackingMessage = `記録中 ±${Math.round(accuracy)}m`;
+  activeTrackLine.setLatLngs(toLeafletCoordinates(state.activeTrack.coordinates));
+  persistJson(ACTIVE_TRACK_STORAGE_KEY, state.activeTrack);
+
+  detectTerritoryClosure(coordinate);
+  renderTerritoryHud();
+
+  const latLng = [coordinate[1], coordinate[0]];
+  if (isFirstPoint) {
+    map.flyTo(latLng, Math.max(map.getZoom(), 17), { duration: 0.65 });
+  } else if (state.followTracking) {
+    const sheetPadding = isMobileLayout() ? sidePanel.getBoundingClientRect().height + 28 : 28;
+    map.panInside(latLng, {
+      paddingTopLeft: L.point(24, 122),
+      paddingBottomRight: L.point(24, sheetPadding),
+      animate: true,
+      duration: 0.3,
+    });
+  }
+}
+
+function handleTrackingError(error) {
+  const messageByCode = {
+    1: "位置情報の利用が許可されていません。",
+    2: "現在位置を取得できません。",
+    3: "GPSの取得がタイムアウトしました。",
+  };
+  const message = messageByCode[error.code] || "GPSでエラーが発生しました。";
+
+  if (error.code === 1) {
+    stopTracking({ save: false, notify: false });
+    showToast(message);
+    return;
+  }
+
+  state.trackingMessage = "GPS再接続中";
+  renderTerritoryHud();
+  showToast(message);
+}
+
+function detectTerritoryClosure(currentCoordinate) {
+  const selfClosure = detectSelfClosure(
+    turfApi,
+    state.activeTrailCoordinates,
+    TERRITORY_OPTIONS,
+  );
+  if (selfClosure) {
+    captureTerritory(selfClosure, currentCoordinate);
+    return;
+  }
+
+  const referenceTracks = [...state.savedTracks, ...state.sessionReferenceTracks];
+  if (!referenceTracks.length) return;
+  const contact = findNearestTrackContact(
+    turfApi,
+    currentCoordinate,
+    referenceTracks,
+    CLOSE_THRESHOLD_METERS,
+  );
+  if (!contact) return;
+
+  if (!state.historicContactAnchor) {
+    state.historicContactAnchor = {
+      ...contact,
+      trailIndex: state.activeTrailCoordinates.length - 1,
+    };
+    return;
+  }
+  if (state.historicContactAnchor.trackId !== contact.trackId) return;
+
+  const referenceTrack = referenceTracks.find((track) => track.id === contact.trackId);
+  const historicClosure = detectHistoricClosure(
+    turfApi,
+    state.activeTrailCoordinates,
+    referenceTrack,
+    state.historicContactAnchor,
+    contact,
+    TERRITORY_OPTIONS,
+  );
+  if (historicClosure) captureTerritory(historicClosure, currentCoordinate);
+}
+
+function captureTerritory(result, currentCoordinate) {
+  const capturedAt = new Date().toISOString();
+  const territory = {
+    id: `territory:${capturedAt}:${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+    capturedAt,
+    areaSquareMeters: result.areaSquareMeters,
+    coordinates: result.ring,
+    source: {
+      kind: result.kind,
+      sessionTrackId: state.activeTrack.id,
+      referenceTrackId: result.contact.trackId || state.activeTrack.id,
+      closeThresholdMeters: CLOSE_THRESHOLD_METERS,
+    },
+  };
+  state.territories.push(territory);
+  persistJson(TERRITORIES_STORAGE_KEY, state.territories);
+
+  if (state.activeTrailCoordinates.length >= 2) {
+    state.sessionReferenceTracks.push({
+      id: `${state.activeTrack.id}:segment:${state.sessionReferenceTracks.length + 1}`,
+      coordinates: [...state.activeTrailCoordinates],
+    });
+  }
+  state.activeTrailCoordinates = [result.contact.coordinate, currentCoordinate];
+  state.historicContactAnchor = null;
+  renderTerritoryPolygons();
+  showToast(`領域を獲得しました +${formatArea(result.areaSquareMeters)}`);
+}
+
+function updateLocationVisualization([longitude, latitude], accuracy) {
+  const latLng = [latitude, longitude];
+  if (!accuracyCircle) {
+    accuracyCircle = L.circle(latLng, {
+      radius: accuracy,
+      color: "#2f7dd1",
+      weight: 1,
+      opacity: 0.55,
+      fillColor: "#2f7dd1",
+      fillOpacity: 0.1,
+      interactive: false,
+    }).addTo(map);
+  } else {
+    accuracyCircle.setLatLng(latLng).setRadius(accuracy);
+  }
+
+  if (!locationMarker) {
+    locationMarker = L.circleMarker(latLng, {
+      radius: 7,
+      color: "#ffffff",
+      weight: 3,
+      fillColor: "#2f7dd1",
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(map);
+  } else {
+    locationMarker.setLatLng(latLng);
+  }
+}
+
+function recoverInterruptedTrack() {
+  const recoveredTrack = loadStoredObject(ACTIVE_TRACK_STORAGE_KEY);
+  localStorage.removeItem(ACTIVE_TRACK_STORAGE_KEY);
+  if (!recoveredTrack?.id || !Array.isArray(recoveredTrack.coordinates) || recoveredTrack.coordinates.length < 2) {
+    return;
+  }
+  recoveredTrack.endedAt = recoveredTrack.endedAt || new Date().toISOString();
+  recoveredTrack.recovered = true;
+  if (!state.savedTracks.some((track) => track.id === recoveredTrack.id)) {
+    state.savedTracks.push(recoveredTrack);
+    persistJson(GPS_TRACKS_STORAGE_KEY, state.savedTracks);
+  }
+}
+
+function renderTerritoryLayers() {
+  renderTerritoryPolygons();
+  renderSavedTracks();
+}
+
+function renderTerritoryPolygons() {
+  territoryPolygonLayer.clearLayers();
+  for (const territory of state.territories) {
+    if (!Array.isArray(territory.coordinates) || territory.coordinates.length < 4) continue;
+    L.polygon(toLeafletCoordinates(territory.coordinates), {
+      color: "#b88712",
+      weight: 2,
+      opacity: 0.88,
+      fillColor: "#f3c845",
+      fillOpacity: 0.28,
+    })
+      .bindTooltip(`獲得領域 ${formatArea(territory.areaSquareMeters)}`, { sticky: true })
+      .addTo(territoryPolygonLayer);
+  }
+}
+
+function renderSavedTracks() {
+  savedTrackLayer.clearLayers();
+  for (const track of state.savedTracks) {
+    if (!Array.isArray(track.coordinates) || track.coordinates.length < 2) continue;
+    L.polyline(toLeafletCoordinates(track.coordinates), {
+      color: "#557080",
+      weight: 3,
+      opacity: 0.48,
+      dashArray: "5 8",
+      interactive: false,
+    }).addTo(savedTrackLayer);
+  }
+}
+
+function renderTerritoryHud() {
+  const totalArea = state.territories.reduce(
+    (sum, territory) => sum + (Number(territory.areaSquareMeters) || 0),
+    0,
+  );
+  territoryControl.classList.toggle("is-tracking", state.tracking);
+  trackingStatus.classList.toggle(
+    "has-low-accuracy",
+    state.tracking && state.lastAccuracyMeters > MAXIMUM_ACCEPTED_ACCURACY_METERS,
+  );
+  trackingStatus.lastChild.textContent = state.trackingMessage || "GPS OFF";
+  territoryArea.textContent = `獲得 ${formatArea(totalArea)}`;
+  trackingDistance.textContent = `移動 ${formatTrackingDistance(state.trackingDistanceMeters)}`;
+  trackingToggleLabel.textContent = state.tracking ? "STOP" : "START";
+  trackingToggle.querySelector(".tracking-icon").innerHTML = state.tracking ? icons.stop : icons.play;
+  trackingToggle.setAttribute(
+    "aria-label",
+    state.tracking ? "GPS軌跡の記録を停止" : "GPS軌跡の記録を開始",
+  );
+}
+
+async function requestTrackingWakeLock() {
+  if (!state.tracking || !navigator.wakeLock || document.visibilityState !== "visible") return;
+  try {
+    const wakeLock = await navigator.wakeLock.request("screen");
+    if (!state.tracking) {
+      await wakeLock.release();
+      return;
+    }
+    state.wakeLock = wakeLock;
+    wakeLock.addEventListener("release", () => {
+      state.wakeLock = null;
+    });
+  } catch {
+    state.wakeLock = null;
+  }
+}
+
+async function releaseTrackingWakeLock() {
+  try {
+    await state.wakeLock?.release();
+  } catch {
+    // The browser may already have released it when the page became hidden.
+  }
+  state.wakeLock = null;
+}
+
 function handleLocate() {
   if (!navigator.geolocation) {
     showToast("このブラウザでは現在地を取得できません。");
@@ -732,6 +1160,46 @@ function showToast(message) {
   toast.textContent = message;
   app.append(toast);
   setTimeout(() => toast.remove(), 3800);
+}
+
+function loadStoredArray(key) {
+  const value = loadStoredObject(key);
+  return Array.isArray(value) ? value : [];
+}
+
+function loadStoredObject(key) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    showToast("端末内の保存容量が不足しています。");
+  }
+}
+
+function toLeafletCoordinates(coordinates) {
+  return coordinates.map(([longitude, latitude]) => [latitude, longitude]);
+}
+
+function roundCoordinate(value) {
+  return Number(value.toFixed(7));
+}
+
+function formatArea(squareMeters) {
+  if (squareMeters < 10_000) return `${Math.round(squareMeters).toLocaleString("ja-JP")}m²`;
+  return `${(squareMeters / 10_000).toFixed(2)}ha`;
+}
+
+function formatTrackingDistance(meters) {
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  return `${(meters / 1000).toFixed(2)}km`;
 }
 
 function formatDistance(meters) {

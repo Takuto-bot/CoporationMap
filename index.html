@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="日本全国の企業・官公庁・公共機関を地図上から探索できるWebアプリ"
@@ -56,6 +56,18 @@
       </section>
 
       <aside id="sidePanel" class="side-panel" aria-live="polite"></aside>
+
+      <section id="territoryControl" class="territory-control" aria-label="GPS陣取り">
+        <div class="territory-readout">
+          <span id="trackingStatus" class="tracking-status"><span aria-hidden="true"></span>GPS OFF</span>
+          <strong id="territoryArea">獲得 0m²</strong>
+          <span id="trackingDistance">移動 0m</span>
+        </div>
+        <button id="trackingToggle" class="tracking-toggle" type="button" aria-label="GPS軌跡の記録を開始">
+          <span class="icon tracking-icon" aria-hidden="true"></span>
+          <span id="trackingToggleLabel">START</span>
+        </button>
+      </section>
 
       <div class="map-actions" aria-label="地図操作">
         <button id="locateButton" class="map-action-button" type="button" aria-label="現在地へ移動">
