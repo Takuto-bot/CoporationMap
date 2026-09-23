@@ -103,6 +103,17 @@ Pythonを直接使う場合は次でも起動できます。
 python -m http.server 4173
 ```
 
+## 本社座標の更新
+
+金融庁EDINETの本社住所と国土地理院の住所検索から基準座標を更新した後、OpenStreetMapの近傍建物形状を使ってピンを建物内へ補正します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/update-headquarters.ps1
+node scripts/snap-headquarters-to-buildings.mjs
+```
+
+建物補正は住所点から45m以内にある建物だけを採用します。該当する建物形状がない場合は、推測で移動せず住所点を維持します。
+
 ## 今後Gビズインフォ等の実データへ接続する箇所
 
 - 日経225企業データ: `src/data/nikkei225Companies.js`

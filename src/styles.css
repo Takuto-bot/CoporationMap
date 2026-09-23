@@ -50,6 +50,7 @@ button {
 .app-shell {
   position: relative;
   min-height: 100vh;
+  color: var(--text);
   background: #dce5ec;
 }
 
@@ -843,12 +844,12 @@ button {
   }
 
   .app-shell[data-sheet-stage="peek"] .side-panel.has-mobile-detail {
-    height: max(148px, 22vh);
+    height: max(158px, 20vh);
   }
 
   @supports (height: 1dvh) {
     .app-shell[data-sheet-stage="peek"] .side-panel.has-mobile-detail {
-      height: max(148px, 22dvh);
+      height: max(158px, 20dvh);
     }
   }
 
@@ -886,8 +887,35 @@ button {
     color: var(--muted);
     font-size: 11px;
     line-height: 1.35;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .mobile-detail-expand-button {
+    width: 100%;
+    min-height: 32px;
+    margin-top: 5px;
+    border: 0;
+    color: var(--accent-strong);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .mobile-detail-expand-button .icon {
+    width: 15px;
+    height: 15px;
+  }
+
+  .app-shell:not([data-sheet-stage="peek"]) .mobile-detail-expand-button {
+    display: none;
   }
 
   .mobile-detail-expanded {
@@ -895,6 +923,7 @@ button {
     padding-top: 12px;
   }
 
+  .app-shell[data-sheet-stage="half"] .mobile-detail-expanded,
   .app-shell[data-sheet-stage="full"] .mobile-detail-expanded {
     display: block;
   }

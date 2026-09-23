@@ -40,6 +40,8 @@ const icons = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"></path><path d="M9 3v15"></path><path d="M15 6v15"></path></svg>',
   external:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>',
+  chevronUp:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"></path></svg>',
   headquarters:
@@ -65,17 +67,23 @@ const map = L.map("map", {
   zoom: DEFAULT_ZOOM,
   zoomControl: false,
   minZoom: 5,
-  maxZoom: 18,
+  maxZoom: L.Browser.retina ? 18 : 19,
   preferCanvas: true,
 });
 
 const baseLayers = {
   light: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    detectRetina: true,
+    maxNativeZoom: 19,
     maxZoom: 19,
+    keepBuffer: 4,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }),
   dark: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    detectRetina: true,
+    maxNativeZoom: 19,
     maxZoom: 19,
+    keepBuffer: 4,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }),
 };
@@ -245,8 +253,9 @@ function renderMarkers(places) {
         icon: createPlaceIcon(place),
         riseOnHover: true,
         title: place.name,
+        bubblingMouseEvents: false,
       });
-      marker.on("click", () => selectPlace(place.id, { fly: false }));
+      marker.on("click", () => selectPlace(place.id));
       marker.on("mouseover", () => setHoveredPlace(place.id));
       marker.on("mouseout", () => clearHoveredPlace(place.id));
       state.markers.set(place.id, marker);
@@ -421,6 +430,9 @@ function renderMobileDetailCard(place) {
         <span class="icon close-icon">${icons.close}</span>
       </button>
     </div>
+    <button class="mobile-detail-expand-button" type="button">
+      <span>詳しく見る</span><span class="icon" aria-hidden="true">${icons.chevronUp}</span>
+    </button>
     <div class="mobile-detail-expanded">
       ${place.description ? `<p class="detail-description">${escapeHtml(place.description)}</p>` : ""}
       <dl class="detail-grid">
@@ -437,6 +449,9 @@ function renderMobileDetailCard(place) {
   `;
 
   card.querySelector(".close-detail-button").addEventListener("click", clearSelectedPlace);
+  card.querySelector(".mobile-detail-expand-button").addEventListener("click", () => {
+    setMobileSheetStage("half");
+  });
   card.querySelector("#visitedButton")?.addEventListener("click", () => toggleVisited(place.id));
   sidePanel.replaceChildren(createSheetHandle(), card);
 }
@@ -558,7 +573,10 @@ function selectPlace(placeId, options = {}) {
     });
     map.once("moveend", () => {
       state.isAnimatingToPlace = false;
+      keepSelectedMarkerAboveSheet(place);
     });
+  } else if (isMobileLayout()) {
+    window.requestAnimationFrame(() => keepSelectedMarkerAboveSheet(place));
   }
   updateAllMarkerStates();
   renderSidePanel();
@@ -603,12 +621,18 @@ function clearSelectedPlace() {
 
 function minimizeSheetForMapInteraction() {
   if (!isMobileLayout() || state.isAnimatingToPlace) return;
-  if (state.selectedPlaceId) {
-    state.selectedPlaceId = null;
-    updateAllMarkerStates();
-    renderSidePanel();
-  }
   setMobileSheetStage("peek");
+}
+
+function keepSelectedMarkerAboveSheet(place) {
+  if (!isMobileLayout() || state.selectedPlaceId !== place.id) return;
+  const sheetHeight = sidePanel.getBoundingClientRect().height;
+  map.panInside([place.latitude, place.longitude], {
+    paddingTopLeft: L.point(20, 118),
+    paddingBottomRight: L.point(20, sheetHeight + 28),
+    animate: true,
+    duration: 0.35,
+  });
 }
 
 function isMobileLayout() {

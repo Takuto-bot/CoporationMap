@@ -1,6 +1,6 @@
 import { NIKKEI_225_HEADQUARTERS } from "./nikkei225Headquarters.js";
 
-const SOURCE = "日経225構成銘柄 / 金融庁EDINET本社所在地 / 国土地理院住所検索";
+const SOURCE = "日経225構成銘柄 / 金融庁EDINET本社所在地 / 国土地理院住所検索 / OpenStreetMap建物形状";
 
 const KNOWN_OVERRIDES = {
   "6501": {
@@ -323,12 +323,12 @@ export const nikkei225Companies = uniqueByCode(NIKKEI_225).map(([stockCode, name
     longitude,
     website: preciseOverride.website,
     description:
-      "日経平均株価（日経225）の構成銘柄です。金融庁EDINETの所在地を基準に、本社住所へピンを配置しています。",
+      "日経平均株価（日経225）の構成銘柄です。金融庁EDINETの所在地と近傍の建物形状を基準に、本社へピンを配置しています。",
     source: SOURCE,
     headquarters: true,
     stockCode,
     corporateNumber: headquarters.corporateNumber,
-    locationPrecision: preciseOverride.latitude ? "building" : "address",
+    locationPrecision: preciseOverride.latitude ? "building" : headquarters.locationPrecision || "address",
     searchAliases: `${stockCode} ${name} ${headquarters.officialName} ${category} 日経225`,
   };
 });

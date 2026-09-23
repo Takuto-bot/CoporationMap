@@ -1,4 +1,4 @@
-const CACHE_NAME = "corporation-map-v3";
+const CACHE_NAME = "corporation-map-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
