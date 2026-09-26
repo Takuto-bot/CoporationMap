@@ -1,145 +1,32 @@
-# Corporation Map
+# 陣取りマップ
 
-日本全国の「企業・官公庁・公共機関」を地図上から探索する、地図主役のWebアプリMVPです。Google Maps APIは使わず、LeafletとOpenStreetMapで実装しています。
+GPSで歩いた軌跡を地図に描き、軌跡が閉じた領域を獲得する個人向けWebアプリです。LeafletとOpenStreetMapを使用し、GitHub Pagesで動作します。
 
-## 使用した技術
+## 使い方
 
-- HTML / CSS / JavaScript ES Modules
-- Leaflet
-- Leaflet.markercluster
-- OpenStreetMap タイル
-- GitHub Pagesで配信しやすい静的ファイル構成
+1. スマートフォンで[公開アプリ](https://takuto-bot.github.io/CoporationMap/)を開きます。
+2. `START`を押して位置情報を許可します。記録中は赤い線で軌跡が表示されます。
+3. 過去の軌跡へ戻って領域を囲むと、獲得エリアが黄色で表示されます。
+4. `STOP`で記録を終了します。右上の履歴から獲得エリアと保存した軌跡へ移動できます。
 
-## ディレクトリ構成
+ホーム画面から使う場合は、iPhoneではSafariの共有メニューから「ホーム画面に追加」、AndroidではChromeのメニューから「アプリをインストール」を選びます。
 
-```text
-.
-├── index.html
-├── package.json
-├── README.md
-├── .github/workflows/pages.yml
-└── src
-    ├── app.js
-    ├── styles.css
-    ├── data/nikkei225Companies.js
-    ├── data/nikkei225Headquarters.js
-    ├── data/mockPlaces.js
-    ├── models/place.js
-    ├── providers
-    │   ├── PlaceProvider.js
-    │   ├── MockPlaceProvider.js
-    │   ├── CompanyProvider.js
-    │   ├── GovernmentProvider.js
-    │   └── OpenStreetMapProvider.js
-    └── services/PlaceService.js
-```
+## 判定と保存
 
-## 地図データの取得元
+- 現在地点が直近20点を除く過去の軌跡へ10m以内に近づくと、閉領域を判定します。
+- 保存済み軌跡に一度接触し、同じ軌跡へ再接触した場合も領域を生成できます。
+- GPS精度が50mを超える点、前の点から3m未満の点、2秒未満の連続サンプルは記録しません。
+- 獲得領域と終了済み軌跡はこのブラウザのローカルストレージに保存します。アカウント同期やサーバー送信はありません。ブラウザのデータを消すと記録も消えます。
+- 判定値は `src/app.js` の定数と `src/services/TerritoryEngine.js` にあります。
 
-地図タイルはOpenStreetMapを使用しています。Dark Modeでは同じOpenStreetMapタイルの明度をCSSで調整しています。
+位置情報にはHTTPSまたはlocalhostが必要です。モバイルブラウザの制約により、画面消灯中やアプリがバックグラウンドにある間はGPSの更新が止まる場合があります。画面スリープの抑止は対応端末でのみ有効です。地図タイルの表示には通信が必要です。
 
-初期データは `src/data/mockPlaces.js` から読み込みます。企業データは `src/data/nikkei225Companies.js` に日経225構成銘柄225社を収録しています。日経225の構成銘柄はNikkei Indexes公式の構成銘柄ページ（Update: Sep/18/2026）を基準にしています。
+## ローカル起動
 
-官公庁データは少量のMock Dataです。将来的には政府オープンデータまたはOpenStreetMap POIへ接続する想定です。
-
-日経225企業の本社住所は、金融庁EDINETコードリスト（2026-09-22取得）の証券コード・所在地・法人番号を使用しています。住所は国土地理院の住所検索で座標化し、`src/data/nikkei225Headquarters.js` に固定しているため、アプリ起動時の外部ジオコーディングは発生しません。確認済みの企業は本社建物中心の座標を優先し、それ以外も市区町村の代表点ではなく番地・号を含む公式所在地へ配置しています。
-
-本社移転を反映する場合は、PowerShellで次を実行します。最新のEDINETコードリストを取得し、225社すべての住所が揃った場合だけデータファイルを更新します。
-
-```powershell
-.\scripts\update-headquarters.ps1
-```
-
-## Placeモデル
-
-UIはデータソースの違いを直接扱わず、Provider層で次の共通モデルへ正規化します。
-
-```js
-{
-  id,
-  name,
-  type, // company | government
-  category,
-  address,
-  latitude,
-  longitude,
-  website,
-  description,
-  source
-  stockCode // 日経225企業の場合
-}
-```
-
-MVPでは本社判定、法人番号、資本金、従業員数なども存在する場合だけ表示します。
-
-## Providerの追加方法
-
-1. `src/providers/PlaceProvider.js` を継承するProviderを作成します。
-2. 外部API固有のレスポンスを `Place` 形式へ `normalize()` で変換します。
-3. `src/app.js` の `PlaceService` 初期化にProviderを追加します。
-
-```js
-const placeService = new PlaceService({
-  providers: [
-    new MockPlaceProvider(),
-    new CompanyProvider({ endpoint: "..." }),
-  ],
-});
-```
-
-## 起動方法
-
-依存パッケージのインストールは不要です。リポジトリ直下で次を実行してください。
+依存パッケージのインストールは不要です。リポジトリ直下で実行します。
 
 ```bash
 npm run dev
 ```
 
-その後、ブラウザで `http://localhost:4173` を開きます。
-
-Pythonを直接使う場合は次でも起動できます。
-
-```bash
-python -m http.server 4173
-```
-
-## 本社座標の更新
-
-金融庁EDINETの本社住所と国土地理院の住所検索から基準座標を更新した後、OpenStreetMapの近傍建物形状を使ってピンを建物内へ補正します。
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/update-headquarters.ps1
-node scripts/snap-headquarters-to-buildings.mjs
-```
-
-建物補正は住所点から45m以内にある建物だけを採用します。該当する建物形状がない場合は、推測で移動せず住所点を維持します。
-
-## 今後Gビズインフォ等の実データへ接続する箇所
-
-- 日経225企業データ: `src/data/nikkei225Companies.js`
-- 企業API接続: `src/providers/CompanyProvider.js`
-- 官公庁データ: `src/providers/GovernmentProvider.js`
-- OpenStreetMap POI: `src/providers/OpenStreetMapProvider.js`
-- Provider統合・検索・フィルター: `src/services/PlaceService.js`
-
-現在はUI体験を優先し、MockProviderで `Map -> Search -> Filter -> Marker -> Side Panel -> Detail Panel` が一通り動く状態にしています。
-## スマホで使う
-
-GitHub Pagesの公開URLをスマートフォンで開き、ホーム画面に追加してください。以後はホーム画面の「企業マップ」アイコンから、通常のアプリのように起動できます。
-
-- iPhone/iPad: Safariの共有メニューから「ホーム画面に追加」
-- Android: Chromeのメニューから「アプリをインストール」または「ホーム画面に追加」
-
-初回表示後はアプリ本体を端末にキャッシュします。地図表示や最新の地図データには通信が必要です。
-
-## GPS陣取り
-
-地図上の「START」を押して位置情報を許可すると、移動軌跡を赤い線で記録します。現在地点が直近20点を除く過去の軌跡へ10m以内まで戻ると、その接触地点から現在地点までの閉領域を検出し、獲得領域として地図上へ保存します。
-
-- 獲得領域と終了済み軌跡はブラウザのローカルストレージだけに保存します。
-- 保存済み軌跡への最初の接触を記録し、同じ軌跡へ再接触した場合も領域を生成できます。
-- GPSは2秒以上の間隔で評価し、精度が50mを超える点と、直前の記録地点から3m未満の点は軌跡へ追加しません。
-- 判定値は `src/app.js` の `CLOSE_THRESHOLD_METERS`、`RECENT_POINT_EXCLUSION` などで変更できます。
-- Geolocation APIを使うため、GitHub PagesなどのHTTPS環境またはlocalhostで実行してください。
-
-記録中は対応端末で画面のスリープを抑止しますが、モバイルブラウザの制約により、画面消灯中やアプリがバックグラウンドへ移動した状態ではGPS更新が停止する場合があります。
+`http://localhost:4173` で開きます。領域判定のテストは `npm test` で実行します。

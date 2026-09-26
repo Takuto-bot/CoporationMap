@@ -1,13 +1,13 @@
 {
-  "name": "企業・官公庁マップ",
-  "short_name": "企業マップ",
-  "description": "日本全国の企業と官公庁を地図上から探索するアプリ",
+  "name": "陣取りマップ",
+  "short_name": "陣取り",
+  "description": "歩いたGPS軌跡で領域を獲得する地図アプリ",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f8fafc",
-  "theme_color": "#0f766e",
+  "theme_color": "#087f72",
   "icons": [
     {
       "src": "./icons/app-icon.svg",

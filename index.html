@@ -3,96 +3,88 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta
-      name="description"
-      content="日本全国の企業・官公庁・公共機関を地図上から探索できるWebアプリ"
-    />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="description" content="歩いた軌跡で領域を獲得するGPS陣取りマップ" />
+    <meta name="theme-color" content="#087f72" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="企業マップ" />
-    <title>企業・官公庁マップ</title>
+    <meta name="apple-mobile-web-app-title" content="陣取りマップ" />
+    <title>陣取りマップ</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/app-icon.svg" />
     <link rel="preconnect" href="https://a.tile.openstreetmap.org" />
     <link rel="preconnect" href="https://b.tile.openstreetmap.org" />
     <link rel="preconnect" href="https://c.tile.openstreetmap.org" />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
-    />
-    <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="./src/styles.css?v=2" />
   </head>
   <body>
     <div id="app" class="app-shell">
-      <main id="map" aria-label="企業・官公庁探索マップ"></main>
+      <main id="map" aria-label="GPS陣取りマップ"></main>
 
-      <section class="search-stack" aria-label="検索とフィルター">
-        <div class="search-box">
-          <span class="search-icon" aria-hidden="true"></span>
-          <input
-            id="searchInput"
-            type="search"
-            autocomplete="off"
-            placeholder="企業・官公庁を検索"
-            aria-label="企業名、法人名、官公庁名、住所で検索"
-          />
-          <button id="clearSearchButton" class="icon-button subtle hidden" type="button" aria-label="検索をクリア">
-            <span class="icon close-icon" aria-hidden="true"></span>
-          </button>
+      <header class="top-bar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none"><path d="M8 21 12 8l11 4-4 12-11-3Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><circle cx="8" cy="21" r="3" fill="currentColor"/><circle cx="23" cy="12" r="3" fill="currentColor"/></svg>
+          </span>
+          <div><strong>陣取りマップ</strong><span>GPS TERRITORY</span></div>
         </div>
-        <div id="suggestions" class="suggestions hidden" role="listbox" aria-label="検索候補"></div>
-        <div id="filterChips" class="filter-chips" aria-label="カテゴリフィルター"></div>
-      </section>
-
-      <aside id="sidePanel" class="side-panel" aria-live="polite"></aside>
-
-      <section id="territoryControl" class="territory-control" aria-label="GPS陣取り">
-        <div class="territory-readout">
-          <span id="trackingStatus" class="tracking-status"><span aria-hidden="true"></span>GPS OFF</span>
-          <strong id="territoryArea">獲得 0m²</strong>
-          <span id="trackingDistance">移動 0m</span>
-        </div>
-        <button id="trackingToggle" class="tracking-toggle" type="button" aria-label="GPS軌跡の記録を開始">
-          <span class="icon tracking-icon" aria-hidden="true"></span>
-          <span id="trackingToggleLabel">START</span>
+        <button id="historyButton" class="header-button" type="button" aria-label="獲得履歴を開く" aria-expanded="false" aria-controls="historyPanel" title="獲得履歴">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="m3 12 9 4 9-4M3 17l9 4 9-4"/></svg>
+          <span id="historyCount">0</span>
         </button>
-      </section>
+      </header>
 
       <div class="map-actions" aria-label="地図操作">
-        <button id="locateButton" class="map-action-button" type="button" aria-label="現在地へ移動">
-          <span class="icon locate-icon" aria-hidden="true"></span>
+        <button id="locateButton" class="map-action-button" type="button" aria-label="現在地へ移動" title="現在地へ移動">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
         </button>
-        <button id="zoomInButton" class="map-action-button" type="button" aria-label="拡大">
-          <span class="icon plus-icon" aria-hidden="true"></span>
+        <button id="zoomInButton" class="map-action-button" type="button" aria-label="拡大" title="拡大">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
-        <button id="zoomOutButton" class="map-action-button" type="button" aria-label="縮小">
-          <span class="icon minus-icon" aria-hidden="true"></span>
+        <button id="zoomOutButton" class="map-action-button" type="button" aria-label="縮小" title="縮小">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
         </button>
+        <button id="themeToggle" class="map-action-button" type="button" aria-label="ダーク表示に切り替え" title="表示テーマを切り替え"></button>
       </div>
 
-      <button id="themeToggle" class="theme-toggle" type="button" aria-label="表示テーマを切り替え">
-        <span id="themeIcon" class="icon sun-icon" aria-hidden="true"></span>
-      </button>
+      <section id="territoryControl" class="territory-control" aria-label="GPS記録">
+        <div class="territory-summary">
+          <div class="primary-metric"><span>獲得面積</span><strong id="territoryArea">0 m²</strong></div>
+          <div class="secondary-metrics">
+            <div><span>獲得</span><strong id="territoryCount">0 エリア</strong></div>
+            <div><span>今回の移動</span><strong id="trackingDistance">0 m</strong></div>
+          </div>
+        </div>
+        <div class="tracking-row">
+          <div id="trackingStatus" class="tracking-status" role="status"><span class="status-dot" aria-hidden="true"></span><span id="trackingStatusText">GPS OFF</span></div>
+          <button id="trackingToggle" class="tracking-toggle" type="button" aria-label="GPS記録を開始">
+            <span id="trackingToggleIcon" class="tracking-toggle-icon" aria-hidden="true"></span>
+            <span id="trackingToggleLabel">START</span>
+          </button>
+        </div>
+      </section>
+
+      <aside id="historyPanel" class="history-panel" aria-label="獲得履歴" aria-hidden="true" inert>
+        <div class="history-heading">
+          <div><span class="eyebrow">MY JOURNEY</span><h2>記録</h2></div>
+          <button id="historyCloseButton" class="history-close" type="button" aria-label="履歴を閉じる" title="閉じる">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="history-tabs" role="tablist" aria-label="記録の種類">
+          <button id="territoriesTab" class="history-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="historyList">獲得エリア</button>
+          <button id="tracksTab" class="history-tab" type="button" role="tab" aria-selected="false" aria-controls="historyList">軌跡</button>
+        </div>
+        <div id="historyList" class="history-list" role="tabpanel"></div>
+      </aside>
+      <div id="historyBackdrop" class="history-backdrop" hidden></div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </div>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script type="module" src="./src/app.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script type="module" src="./src/app.js?v=2"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js"));
