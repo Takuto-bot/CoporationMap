@@ -1,11 +1,11 @@
-const CACHE_NAME = "territory-map-v2";
+const CACHE_NAME = "territory-map-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icons/app-icon.svg",
-  "./src/app.js?v=2",
-  "./src/styles.css?v=2",
+  "./src/app.js?v=4",
+  "./src/styles.css?v=4",
   "./src/services/TerritoryEngine.js",
   "./src/vendor/turf.min.js"
 ];

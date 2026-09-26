@@ -12,6 +12,7 @@ const CLOSE_THRESHOLD_METERS = 10;
 const MINIMUM_POINT_DISTANCE_METERS = 3;
 const MINIMUM_POINT_INTERVAL_MILLISECONDS = 2000;
 const MAXIMUM_ACCEPTED_ACCURACY_METERS = 50;
+const MAX_MAP_ZOOM = L.Browser.retina ? 18 : 19;
 const GPS_TRACKS_STORAGE_KEY = "corporation-map-gps-tracks-v1";
 const ACTIVE_TRACK_STORAGE_KEY = "corporation-map-active-gps-track-v1";
 const TERRITORIES_STORAGE_KEY = "corporation-map-territories-v1";
@@ -41,6 +42,8 @@ const historyList = $("#historyList");
 const territoriesTab = $("#territoriesTab");
 const tracksTab = $("#tracksTab");
 const locateButton = $("#locateButton");
+const zoomInButton = $("#zoomInButton");
+const zoomOutButton = $("#zoomOutButton");
 const themeToggle = $("#themeToggle");
 const toast = $("#toast");
 
@@ -53,8 +56,8 @@ const icons = {
 };
 
 const map = L.map("map", {
-  center: [36.2, 138.2], zoom: 5, zoomControl: false, minZoom: 5,
-  maxZoom: 19, preferCanvas: true,
+  center: [35.681236, 139.767125], zoom: 11, zoomControl: false, minZoom: 5,
+  maxZoom: MAX_MAP_ZOOM, preferCanvas: true,
 });
 const baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   detectRetina: true, maxNativeZoom: 19, maxZoom: 19, keepBuffer: 4,
@@ -69,6 +72,11 @@ const activeTrackLine = L.polyline([], {
 let locationMarker = null;
 let accuracyCircle = null;
 let toastTimer = null;
+const playerIcon = L.divIcon({
+  className: "player-icon",
+  html: '<span class="player-icon-body"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="m9 20 3-6 3 6M6 12l6-3 6 3M12 9v5"/></svg></span>',
+  iconSize: [42, 42], iconAnchor: [21, 21],
+});
 
 const state = {
   tracking: false,
@@ -83,6 +91,7 @@ const state = {
   trackingMessage: "GPS OFF",
   followTracking: true,
   historyTab: "territories",
+  initialLocationPending: true,
   territories: loadStoredArray(TERRITORIES_STORAGE_KEY),
   savedTracks: loadStoredArray(GPS_TRACKS_STORAGE_KEY),
 };
@@ -97,14 +106,16 @@ function init() {
   renderDashboard();
   renderHistory();
   focusLatestRecord();
+  locateOnStart();
+  updateZoomControls();
   window.setTimeout(() => map.invalidateSize(), 100);
 }
 
 function bindEvents() {
   trackingToggle.addEventListener("click", () => state.tracking ? stopTracking() : startTracking());
   locateButton.addEventListener("click", handleLocate);
-  $("#zoomInButton").addEventListener("click", () => map.zoomIn());
-  $("#zoomOutButton").addEventListener("click", () => map.zoomOut());
+  zoomInButton.addEventListener("click", () => { state.initialLocationPending = false; map.zoomIn(); });
+  zoomOutButton.addEventListener("click", () => { state.initialLocationPending = false; map.zoomOut(); });
   themeToggle.addEventListener("click", toggleTheme);
   historyButton.addEventListener("click", openHistory);
   $("#historyCloseButton").addEventListener("click", closeHistory);
@@ -114,7 +125,11 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && app.classList.contains("history-open")) closeHistory();
   });
-  map.on("dragstart", () => { state.followTracking = false; });
+  map.on("dragstart", () => {
+    state.followTracking = false;
+    state.initialLocationPending = false;
+  });
+  map.on("zoomend", updateZoomControls);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") requestTrackingWakeLock();
   });
@@ -127,6 +142,7 @@ function startTracking() {
   if (!turfApi) return showToast("領域判定を読み込めませんでした。通信状態を確認してください。");
 
   const startedAt = new Date().toISOString();
+  state.initialLocationPending = false;
   state.tracking = true;
   state.followTracking = true;
   state.trackingDistanceMeters = 0;
@@ -299,15 +315,14 @@ function updateLocationVisualization([longitude, latitude], accuracy) {
   const latLng = [latitude, longitude];
   if (!accuracyCircle) {
     accuracyCircle = L.circle(latLng, {
-      radius: accuracy, color: "#247ac4", weight: 1, opacity: 0.5,
-      fillColor: "#247ac4", fillOpacity: 0.1, interactive: false,
+      radius: accuracy, color: "#247ac4", weight: 1, opacity: 0.45,
+      fillColor: "#247ac4", fillOpacity: 0.035, interactive: false,
     }).addTo(map);
   } else accuracyCircle.setLatLng(latLng).setRadius(accuracy);
 
   if (!locationMarker) {
-    locationMarker = L.circleMarker(latLng, {
-      radius: 7, color: "#fff", weight: 3,
-      fillColor: "#247ac4", fillOpacity: 1, interactive: false,
+    locationMarker = L.marker(latLng, {
+      icon: playerIcon, interactive: false, keyboard: false,
     }).addTo(map);
   } else locationMarker.setLatLng(latLng);
 }
@@ -400,7 +415,9 @@ function selectHistoryTab(tab) {
 function renderHistory() {
   historyList.replaceChildren();
   const isTerritory = state.historyTab === "territories";
-  const records = isTerritory ? state.territories : state.savedTracks;
+  const records = (isTerritory ? state.territories : state.savedTracks)
+    .filter((record) => record && Array.isArray(record.coordinates) && record.coordinates.length >= 2);
+  historyPanel.classList.toggle("is-empty", !records.length);
   if (!records.length) {
     const empty = document.createElement("div");
     empty.className = "history-empty";
@@ -431,7 +448,7 @@ function renderHistory() {
     arrow.innerHTML = icons.arrow;
     button.append(text, valueElement, arrow);
     button.addEventListener("click", () => {
-      const bounds = L.latLngBounds(toLeafletCoordinates(record.coordinates));
+      const bounds = L.latLngBounds(toLeafletCoordinates(record.coordinates.filter(isCoordinate)));
       closeHistory();
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.35), { maxZoom: 17, animate: true });
     });
@@ -442,8 +459,34 @@ function renderHistory() {
 function focusLatestRecord() {
   const latest = state.territories.at(-1) || state.savedTracks.at(-1);
   if (!latest?.coordinates?.length) return;
-  const bounds = L.latLngBounds(toLeafletCoordinates(latest.coordinates));
+  const bounds = L.latLngBounds(toLeafletCoordinates(latest.coordinates.filter(isCoordinate)));
   if (bounds.isValid()) map.fitBounds(bounds.pad(0.5), { maxZoom: 16, animate: false });
+}
+
+function locateOnStart() {
+  if (!navigator.geolocation) return;
+  try {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        if (![latitude, longitude, accuracy].every(Number.isFinite)) return;
+        updateLocationVisualization([longitude, latitude], accuracy);
+        if (state.initialLocationPending && !state.tracking) {
+          map.setView([latitude, longitude], 16, { animate: false });
+        }
+        state.initialLocationPending = false;
+      },
+      () => { state.initialLocationPending = false; },
+      { enableHighAccuracy: true, maximumAge: 300000, timeout: 10000 },
+    );
+  } catch {
+    state.initialLocationPending = false;
+  }
+}
+
+function updateZoomControls() {
+  zoomInButton.disabled = map.getZoom() >= MAX_MAP_ZOOM;
+  zoomOutButton.disabled = map.getZoom() <= map.getMinZoom();
 }
 
 function handleLocate() {
@@ -550,9 +593,15 @@ function formatTrackDistance(coordinates) {
   if (!turfApi || !Array.isArray(coordinates)) return "0 m";
   let meters = 0;
   for (let index = 1; index < coordinates.length; index += 1) {
-    meters += distanceMeters(turfApi, coordinates[index - 1], coordinates[index]);
+    if (!isCoordinate(coordinates[index - 1]) || !isCoordinate(coordinates[index])) continue;
+    try { meters += distanceMeters(turfApi, coordinates[index - 1], coordinates[index]); }
+    catch { /* Ignore a malformed stored segment. */ }
   }
   return formatDistance(meters);
+}
+
+function isCoordinate(value) {
+  return Array.isArray(value) && value.length >= 2 && value.every(Number.isFinite);
 }
 
 function formatDate(value) {
